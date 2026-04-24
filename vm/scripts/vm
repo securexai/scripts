@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# vm — CLI dispatcher for the scripts/vm/ workflow.
+# Validates the subcommand, then execs the matching subcommands/<cmd>.sh.
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+. "${SCRIPT_DIR}/lib/common.sh"
+
+usage() {
+  cat <<'EOF' >&2
+usage: vm <subcommand> [args...]
+
+  create   --target {fedora-cloud|kinoite} --name <n> [options]
+  start    <name>
+  stop     <name>                graceful shutdown (force after 30s)
+  destroy  <name>                destroy + undefine + remove disk/seed
+  ssh      <name> [-- cmd...]    open ssh session (or run cmd remotely)
+  snapshot <name> <snap>
+  reset    <name> <snap>         revert to snapshot
+  list                           tidy virsh list --all
+  status   <name>                state, IP, snapshots, disk path
+  build-kinoite                  build the Kinoite qcow2 via bib (slow)
+
+Env overrides honored everywhere:
+  LIBVIRT_DEFAULT_URI            default qemu:///session
+  XDG_CACHE_HOME                 image cache root
+  XDG_STATE_HOME                 disk + seed root
+  VM_SSH_PUBKEY                  default ~/.ssh/id_ed25519.pub
+  REBUILD=1                      force re-download / rebuild
+  TRACE=1                        bash xtrace
+  NO_COLOR=1                     suppress color
+EOF
+}
+
+if (( $# < 1 )); then
+  usage; exit 2
+fi
+
+case "$1" in
+  -h|--help|help) usage; exit 0;;
+esac
+
+cmd="$1"; shift
+sub="${SCRIPT_DIR}/subcommands/${cmd}.sh"
+
+[[ -x "${sub}" ]] || die "unknown subcommand: ${cmd} — run 'vm help' for the list"
+
+exec "${sub}" "$@"
