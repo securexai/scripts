@@ -1,0 +1,92 @@
+# syntax=docker/dockerfile:1
+# Pinned toolbx image for the `scripts` repo.
+# Base: fedora-toolbox:43 (matches host Kinoite 43).
+
+FROM registry.fedoraproject.org/fedora-toolbox:43
+
+# Required for `toolbox create --image` to accept this as a toolbx image.
+LABEL com.github.containers.toolbox="true"
+LABEL org.opencontainers.image.title="scripts-toolbox"
+LABEL org.opencontainers.image.description="Pinned dev toolbox for the scripts repo (uv, ruff, pre-commit, betterleaks, commitlint)."
+
+# System tools: git, pre-commit (from CLAUDE.md "globally-installed"),
+# nodejs (runtime only — pnpm is installed below as a static binary, not via
+# npm/corepack), python3 as the pre-commit interpreter, curl/ca-certs for
+# installers, jq/ripgrep as general dev utilities.
+#
+# install_weak_deps=False suppresses nodejs's Recommends — drops nodejs-npm,
+# nodejs-docs and nodejs-full-i18n (~140 MB) that we don't need.
+RUN dnf install -y --setopt=install_weak_deps=False \
+      git \
+      pre-commit \
+      nodejs \
+      python3 \
+      curl \
+      ca-certificates \
+      jq \
+      ripgrep \
+ && dnf clean all \
+ && rm -rf /var/cache/dnf
+
+# uv: install system-wide to /usr/local/bin so every toolbox user shares the
+# same binary. Per-user tool installs still land under $HOME (uv default).
+ARG UV_VERSION=0.11.7
+RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" \
+      | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
+ && /usr/local/bin/uv --version
+
+# ruff: pin at image scope under /opt/uv-tools so the toolchain is enforced,
+# not drift-prone per user. UV_TOOL_DIR is only set for this RUN; it is NOT
+# exported as ENV, so a user `uv tool install` later still lands in the
+# user's own ~/.local/share/uv directory.
+RUN UV_TOOL_DIR=/opt/uv-tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin \
+    uv tool install ruff \
+ && ruff --version
+
+# betterleaks: distributed as a Go release binary on GitHub (not pip/cargo).
+# Pin both version and sha256; the build fails fast if upstream rotates the
+# asset or the download corrupts. amd64-only — add an arm64 branch here if
+# the toolbox ever needs to run on Apple Silicon / arm Linux.
+ARG BETTERLEAKS_VERSION=1.1.2
+ARG BETTERLEAKS_SHA256=648c20617178065072ff1791d383192a62c911d9b4427f0426a8c504a6d9ddad
+RUN set -eu; \
+    url="https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"; \
+    tmp="$(mktemp -d)"; \
+    curl -fsSL -o "${tmp}/betterleaks.tar.gz" "${url}"; \
+    echo "${BETTERLEAKS_SHA256}  ${tmp}/betterleaks.tar.gz" | sha256sum -c -; \
+    tar -xzf "${tmp}/betterleaks.tar.gz" -C "${tmp}"; \
+    bin="$(find "${tmp}" -type f -name betterleaks -print -quit)"; \
+    [ -n "${bin}" ] || { echo "betterleaks binary not found in archive"; exit 1; }; \
+    install -m 0755 "${bin}" /usr/local/bin/betterleaks; \
+    rm -rf "${tmp}"; \
+    /usr/local/bin/betterleaks version 2>/dev/null \
+      || /usr/local/bin/betterleaks --version
+
+# pnpm: pinned static binary from the upstream GitHub release (Fedora's
+# nodejs package strips out corepack, so the usual `corepack enable` route
+# is unavailable). Mirrors the betterleaks pattern: version + sha256 pinned,
+# build fails fast if upstream rotates the asset. amd64-only.
+#
+# Global pnpm installs go straight to /usr/local/bin via --global-bin-dir
+# (already on PATH, satisfies pnpm's safety check); --global-dir holds the
+# package store under /opt so user $HOME stays untouched.
+ARG PNPM_VERSION=10.33.1
+ARG PNPM_SHA256=01994535f706e945f44646eb57c1c81bd42231739256809a1e6490332cd6c23e
+RUN set -eu; \
+    url="https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linuxstatic-x64"; \
+    tmp="$(mktemp -d)"; \
+    curl -fsSL -o "${tmp}/pnpm" "${url}"; \
+    echo "${PNPM_SHA256}  ${tmp}/pnpm" | sha256sum -c -; \
+    install -m 0755 "${tmp}/pnpm" /usr/local/bin/pnpm; \
+    rm -rf "${tmp}"; \
+    mkdir -p /opt/pnpm-global; \
+    pnpm --version; \
+    pnpm add -g \
+      --global-dir=/opt/pnpm-global \
+      --global-bin-dir=/usr/local/bin \
+      @commitlint/cli @commitlint/config-conventional; \
+    commitlint --version
+
+# Toolbx enters with the host user's UID; no USER directive needed.
+CMD ["/bin/bash"]

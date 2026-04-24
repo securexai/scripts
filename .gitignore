@@ -1,0 +1,33 @@
+# Claude Code per-project state (conversation history, plans, project memory)
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
+# VM artifacts (will live under XDG dirs, but belt-and-braces)
+*.qcow2
+*.iso
+*.img
