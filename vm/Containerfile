@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+# Optional toolbox image for the vm/ workflow. Extends scripts-toolbox with
+# VM-management clients so the user can drive libvirt and the bib (bootc-
+# image-builder) pipeline from inside the toolbox without going to the host
+# shell. The libvirt daemon itself runs on the host (see vm/setup.sh) — this
+# image only ships the clients that talk to it.
+#
+# Build:
+#   podman build -t localhost/scripts-vm-toolbox:fedora-43 -f vm/Containerfile vm/
+# Use:
+#   toolbox create --image localhost/scripts-vm-toolbox:fedora-43 --container scripts-vm
+#   toolbox enter scripts-vm
+
+FROM localhost/scripts-toolbox:fedora-43
+
+LABEL com.github.containers.toolbox="true"
+LABEL org.opencontainers.image.title="scripts-vm-toolbox"
+LABEL org.opencontainers.image.description="scripts-toolbox + virt-install/virsh/genisoimage/podman client for vm/ workflows."
+
+# VM tooling:
+# - libvirt-client: virsh CLI (talks to host libvirtd over the bind-mounted
+#   qemu:///session socket).
+# - virt-install: guest provisioning helper (--import path is what vm/
+#   subcommands use).
+# - genisoimage: builds NoCloud cloud-init seed ISOs.
+# - podman: client used by the bib pipeline. Image build itself runs under
+#   the host's podman via socket-forwarding or `flatpak-spawn --host`.
+RUN dnf install -y --setopt=install_weak_deps=False \
+      libvirt-client \
+      virt-install \
+      genisoimage \
+      podman \
+ && dnf clean all \
+ && rm -rf /var/cache/dnf
+
+CMD ["/bin/bash"]
