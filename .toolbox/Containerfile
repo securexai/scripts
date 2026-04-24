@@ -9,15 +9,17 @@ LABEL com.github.containers.toolbox="true"
 LABEL org.opencontainers.image.title="scripts-toolbox"
 LABEL org.opencontainers.image.description="Pinned dev toolbox for the scripts repo (uv, ruff, pre-commit, betterleaks, commitlint)."
 
-# System tools: git, pre-commit (from CLAUDE.md "globally-installed"),
-# nodejs (runtime only — pnpm is installed below as a static binary, not via
-# npm/corepack), python3 as the pre-commit interpreter, curl/ca-certs for
-# installers, jq/ripgrep as general dev utilities.
+# System tools: git, gh (GitHub CLI — repo/PR/auth operations, also satisfies
+# git's credential.helper when it's wired to gh), pre-commit (from CLAUDE.md
+# "globally-installed"), nodejs (runtime only — pnpm is installed below as a
+# static binary, not via npm/corepack), python3 as the pre-commit interpreter,
+# curl/ca-certs for installers, jq/ripgrep as general dev utilities.
 #
 # install_weak_deps=False suppresses nodejs's Recommends — drops nodejs-npm,
 # nodejs-docs and nodejs-full-i18n (~140 MB) that we don't need.
 RUN dnf install -y --setopt=install_weak_deps=False \
       git \
+      gh \
       pre-commit \
       nodejs \
       python3 \
