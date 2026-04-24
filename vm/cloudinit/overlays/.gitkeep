@@ -1,0 +1,6 @@
+# Per-VM cloud-init overlays go here. Layout:
+#   cloudinit/overlays/<vm-name>/user-data.d.yaml      (additional cloud-config)
+#   cloudinit/overlays/<vm-name>/meta-data.d.yaml      (additional meta-data)
+#
+# The merge contract is documented in vm/README.md. Keep overlays tiny —
+# heavy provisioning belongs in the script being tested, not in cloud-init.
