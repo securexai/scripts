@@ -1,0 +1,33 @@
+# bootc-image-builder customizations for the Fedora 43 Kinoite VM target.
+# Schema reference: https://github.com/osbuild/bootc-image-builder
+#
+# What this does:
+#   1. Creates the 'core' user in the wheel group.
+#   2. Enables the cloud-init systemd targets so the NoCloud seed ISO we
+#      attach as a CD-ROM is consumed on first boot for SSH key injection.
+#
+# IMPORTANT: cloud-init is NOT installed in stock Kinoite. If your bib
+# version doesn't auto-install it via the enabled-services declaration,
+# you'll need a derived OCI image:
+#
+#   FROM quay.io/fedora-ostree-desktops/kinoite:43
+#   RUN rpm-ostree install cloud-init && \
+#       ostree container commit
+#
+# Build that, push to a registry you control, and point OCI_REF at it.
+
+[[customizations.user]]
+name = "core"
+groups = ["wheel"]
+
+[[customizations.services.enabled]]
+name = "cloud-init.service"
+
+[[customizations.services.enabled]]
+name = "cloud-config.service"
+
+[[customizations.services.enabled]]
+name = "cloud-final.service"
+
+[[customizations.services.enabled]]
+name = "cloud-init-local.service"
