@@ -36,7 +36,8 @@ _resolve_podman() {
 
 build_kinoite_qcow() {
   local target_env="$1"
-  [[ -r "${target_env}" ]] || die "target env not readable: ${target_env}"
+  local config_override="${2:-}"
+  [[ -r "${target_env}" ]] || die_with "${EXIT_USAGE}" "target env not readable: ${target_env}"
 
   local oci_ref oci_digest bib_version bib_config_rel
   read -r oci_ref oci_digest bib_version bib_config_rel < <(
@@ -51,19 +52,35 @@ build_kinoite_qcow() {
   )
 
   [[ -n "${oci_ref}" && -n "${oci_digest}" && -n "${bib_version}" && -n "${bib_config_rel}" ]] \
-    || die "kinoite env missing required vars (OCI_REF/OCI_DIGEST/BIB_VERSION/BIB_CONFIG_REL)"
+    || die_with "${EXIT_USAGE}" "kinoite env missing required vars (OCI_REF/OCI_DIGEST/BIB_VERSION/BIB_CONFIG_REL)"
 
-  local bib_config="${_BIB_VM_ROOT}/targets/${bib_config_rel}"
-  [[ -r "${bib_config}" ]] || die "bib config not found: ${bib_config}"
+  # Override config (e.g. kinoite-cockpit.toml) keeps a separate output
+  # cache so a base build and a cockpit build don't clobber each other.
+  local effective_config_rel="${config_override:-${bib_config_rel}}"
+  local bib_config="${_BIB_VM_ROOT}/targets/${effective_config_rel}"
+  [[ -r "${bib_config}" ]] || die_with "${EXIT_USAGE}" "bib config not found: ${bib_config}"
 
-  local out_dir="${IMAGE_CACHE_DIR}/kinoite-out"
+  local out_subdir="kinoite-out"
+  if [[ -n "${config_override}" ]]; then
+    out_subdir="kinoite-out-${config_override%.toml}"
+  fi
+  local out_dir="${IMAGE_CACHE_DIR}/${out_subdir}"
   mkdir -p "${out_dir}"
 
   local qcow="${out_dir}/qcow2/disk.qcow2"
+  local digest_sidecar="${out_dir}/.oci_digest"
+
+  # Cache hit only if the qcow2 exists AND was built from the digest
+  # currently pinned in the env file. Otherwise, the upstream pin moved
+  # and we must rebuild. The sidecar is written atomically after a
+  # successful build (see below).
   if [[ "${REBUILD:-0}" != "1" ]] && [[ -f "${qcow}" ]]; then
-    log "kinoite qcow2 cache hit: ${qcow} (set REBUILD=1 to rebuild)"
-    printf '%s' "${qcow}"
-    return 0
+    if [[ -r "${digest_sidecar}" ]] && [[ "$(< "${digest_sidecar}")" == "${oci_digest}" ]]; then
+      log "kinoite qcow2 cache hit: ${qcow} (digest matches; set REBUILD=1 to force)"
+      printf '%s' "${qcow}"
+      return 0
+    fi
+    warn "kinoite qcow2 cache present but OCI_DIGEST has drifted — rebuilding"
   fi
 
   rm -rf "${out_dir}"
@@ -84,7 +101,14 @@ build_kinoite_qcow() {
     --config /config.toml \
     "${oci_ref}@${oci_digest}"
 
-  [[ -f "${qcow}" ]] || die "bib finished but expected output not found: ${qcow}"
+  [[ -f "${qcow}" ]] || die_with "${EXIT_GENERIC}" "bib finished but expected output not found: ${qcow}"
+
+  # Record the digest used for this build so the next cache-hit check can
+  # detect upstream drift. Atomic write via mv so a partial sidecar never
+  # validates a stale qcow.
+  printf '%s' "${oci_digest}" > "${digest_sidecar}.partial"
+  mv -f "${digest_sidecar}.partial" "${digest_sidecar}"
+
   log "kinoite qcow2 ready: ${qcow}"
   printf '%s' "${qcow}"
 }
