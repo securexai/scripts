@@ -36,19 +36,27 @@ RUN dnf install -y --setopt=install_weak_deps=False \
       virt-install \
       genisoimage \
       podman \
-      shellspec \
       ShellCheck \
       shfmt \
       nodejs \
-      flock \
+      util-linux-core \
  && dnf clean all \
  && rm -rf /var/cache/dnf
 
-# pnpm via corepack; install markdownlint-cli2 globally for doc linting.
-# Pinning to a specific minor avoids surprise rule changes between CI
-# runs; bump deliberately.
+# shellspec is not packaged in Fedora; install via the upstream installer
+# into /usr/local so it lives outside any user's $HOME.
+RUN curl -fsSL https://git.io/shellspec \
+  | sh -s -- 0.28.1 --yes --prefix /usr/local
+
+# pnpm via corepack with a system-wide PNPM_HOME so global installs land in
+# /usr/local/share/pnpm (writable to root in the image build, read-only at
+# runtime). Pin pnpm and markdownlint-cli2; bump deliberately.
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH=/usr/local/share/pnpm:${PATH}
 RUN corepack enable \
  && corepack prepare pnpm@9.15.0 --activate \
+ && mkdir -p "${PNPM_HOME}" \
+ && pnpm config set global-bin-dir "${PNPM_HOME}" \
  && pnpm add -g markdownlint-cli2@0.18.0
 
 CMD ["/bin/bash"]
