@@ -3,4 +3,3 @@
 --default-path spec
 --shell bash
 --error-exit-code 1
---xtrace-only
