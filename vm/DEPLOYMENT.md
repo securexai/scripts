@@ -1,17 +1,21 @@
 # vm/ Deployment & Test Status
 
-**Status:** yellow / pinned, tests pending — code is complete, preflight
-passes, and `IMAGE_SHA256` + `OCI_DIGEST` are pinned. The default
-ShellSpec lane has not yet been run end-to-end against a real libvirt
-host; flip to green once it passes cleanly.
+**Status:** yellow / smoke partial — host bootstrap green, four real
+bugs fixed end-to-end (modular libvirt daemons, `VM_ROOT` depth in
+subcommands, `get_ipv4` ARP fallback, ShellSpec `run command` vs
+`run script` for absolute paths). Default-lane smoke 2026-04-25 18:31:
+**18 PASS · 2 FAILED · 3 WARNED** out of 23 examples that ran; the
+abort in `40_snapshot_reset_spec.sh:23` (multi-`When`, R-014) prevented
+specs 50–80 from running. Flip to green is gated on R-014 fix +
+the dispatcher EXIT_USAGE expectation (`00_preflight_spec.sh:58`).
 
 **Last verified:** 2026-04-25
 
 **Owner:** [@securexai](https://github.com/securexai)
 
-**Doc version:** 1.2
+**Doc version:** 1.3
 
-**Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD)
+**Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD `49ecc0a`)
 
 ---
 
@@ -23,8 +27,14 @@ host; flip to green once it passes cleanly.
   ([`targets/fedora-cloud.env:17`](targets/fedora-cloud.env),
   [`targets/kinoite.env:21`](targets/kinoite.env)). `vm create` no longer fails fast on
   missing pins. `BIB_VERSION="latest"` remains pending (R-003).
+- End-to-end exercise on a real Fedora 43 + Kinoite host surfaced four bugs fixed in
+  `2e1c338`, `8e22366`, `08f5405`, `49ecc0a` (`edc201f` for ShellSpec output config). VMs
+  now boot, network out via the system bridge, and authenticate over SSH using per-VM keys.
 - The default ShellSpec lane runs via `./tests/smoke.sh`; the kinoite lane is opt-in
-  (`VM_E2E_KINOITE=1`). Neither has been run end-to-end yet on this host.
+  (`VM_E2E_KINOITE=1`). Default lane is currently partially green — see Test Matrix.
+- New host prerequisite: a session-scope `default` libvirt network (R-013) — the scripts
+  default to `qemu:///session` for rootless XDG paths, but libvirt's stock `default` NAT
+  network only exists in `qemu:///system`. See Phase 1.5 below for the one-time setup.
 
 ## Scope
 
@@ -83,12 +93,13 @@ Status legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked
 
 ### Phase 1 — Host bootstrap
 
-| #     | Item                          | Command / file                                              | Status | Notes                               |
-| ----- | ----------------------------- | ----------------------------------------------------------- | ------ | ----------------------------------- |
-| 1.1   | Layered packages installed    | `./vm/setup.sh`                                             | `[ ]`  | Reboot if rpm-ostree staged.        |
-| 1.2   | `libvirtd.socket` active      | `systemctl --user is-active libvirtd.socket`                | `[ ]`  | Auto-enabled by `setup.sh`.         |
-| 1.3   | User in `libvirt` group       | `id -nG \| grep -w libvirt`                                 | `[ ]`  | Only required for `qemu:///system`. |
-| 1.4   | Full preflight green          | `./vm/setup.sh` (re-run post-reboot) prints `preflight: ok` | `[ ]`  | Or `VM_PREFLIGHT=full vm list`.     |
+| #     | Item                                     | Command / file                                              | Status | Notes                                                                                                         |
+| ----- | ---------------------------------------- | ----------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| 1.1   | Layered packages installed               | `./vm/setup.sh`                                             | `[x]`  | Reboot if `rpm-ostree status` shows `staged: true, booted: false`.                                            |
+| 1.2   | libvirt reachable on `LIBVIRT_DEFAULT_URI` | `virsh -c $LIBVIRT_DEFAULT_URI hostname`                    | `[x]`  | Fedora 43 ships modular daemons (`virtqemud` auto-launches per-user); `setup.sh` probes reachability directly. |
+| 1.3   | User in `libvirt` group                  | `id -nG \| grep -w libvirt`                                 | `[x]`  | Only required for `qemu:///system`; rootless `qemu:///session` flow does not need it.                         |
+| 1.4   | Full preflight green                     | `./vm/setup.sh` (re-run post-reboot) prints `preflight: ok` | `[x]`  | Or `VM_PREFLIGHT=full vm list`. Verified `2026-04-25`.                                                        |
+| 1.5   | Session-scope `default` network active   | `virsh -c qemu:///session net-list \| grep -w default`       | `[x]`  | One-time `virsh net-define` of a bridge-mode alias to system `virbr0` — see R-013.                            |
 
 ### Phase 2 — Digest pinning (supply chain)
 
@@ -100,19 +111,19 @@ Status legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked
 
 ### Phase 3 — First fedora-cloud VM
 
-| #     | Item                                | Command                                                     | Status | Notes                                |
-| ----- | ----------------------------------- | ----------------------------------------------------------- | ------ | ------------------------------------ |
-| 3.1   | Probe `vm create`                   | `vm create --target fedora-cloud --name probe`              | `[ ]`  | Blocks on Phase 2.1.                 |
-| 3.2   | Probe `vm ssh` (non-interactive)    | `vm ssh probe -- uname -r`                                  | `[ ]`  | Confirms per-VM key (B1) works.      |
-| 3.3   | Probe `vm destroy` cleanliness      | `vm destroy probe && find ~/.local/state/scripts-vm`        | `[ ]`  | Empty under disks/ and seeds/.       |
+| #     | Item                                | Command                                                     | Status | Notes                                                                       |
+| ----- | ----------------------------------- | ----------------------------------------------------------- | ------ | --------------------------------------------------------------------------- |
+| 3.1   | Probe `vm create`                   | `vm create --target fedora-cloud --name probe`              | `[x]`  | Verified manually with diag VMs (2026-04-25); 5/5 spec-10 expectations PASS. |
+| 3.2   | Probe `vm ssh` (non-interactive)    | `vm ssh probe -- uname -r`                                  | `[x]`  | Confirms per-VM key (B1) works; `30_ssh_and_sudo_spec.sh` 3/4 PASS, 1 WARNED. |
+| 3.3   | Probe `vm destroy` cleanliness      | `vm destroy probe && find ~/.local/state/scripts-vm`        | `[~]`  | Spec 60 in flight; manual diag tear-downs leave `disks/` + `seeds/` empty.   |
 
 ### Phase 4 — Cloud-init + internet gate
 
-| #     | Item                                       | Command                                                             | Status | Notes                                  |
-| ----- | ------------------------------------------ | ------------------------------------------------------------------- | ------ | -------------------------------------- |
-| 4.1   | `cloud-init status --wait` exit ≠ 1        | `vm ssh probe -- 'cloud-init status --wait; rc=$?; [[ $rc -ne 1 ]]'` | `[ ]`  | Wired into `vm create` post-boot (A2). |
-| 4.2   | Outbound HTTPS reaches fedoraproject.org    | `vm ssh probe -- 'curl -fsS --max-time 5 https://fedoraproject.org -o /dev/null'` | `[ ]`  | Same A2 hook.                  |
-| 4.3   | DNS resolves quay.io                       | `vm ssh probe -- 'getent hosts quay.io'`                            | `[ ]`  | Verified by spec 20.                   |
+| #     | Item                                       | Command                                                             | Status | Notes                                                                          |
+| ----- | ------------------------------------------ | ------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------ |
+| 4.1   | `cloud-init status --wait` exit ≠ 1        | `vm ssh probe -- 'cloud-init status --wait; rc=$?; [[ $rc -ne 1 ]]'` | `[~]`  | Spec 20 reports WARNED (assertion succeeds, stderr unexpected) — not a failure. |
+| 4.2   | Outbound HTTPS reaches fedoraproject.org    | `vm ssh probe -- 'curl -fsS --max-time 5 https://fedoraproject.org -o /dev/null'` | `[x]`  | Spec 20 PASS confirmed in current smoke run.                          |
+| 4.3   | DNS resolves quay.io                       | `vm ssh probe -- 'getent hosts quay.io'`                            | `[~]`  | Spec 20 reports WARNED — see 4.1. Both gated on cosmetic stderr noise from ssh. |
 
 ### Phase 5 — Cockpit (optional, opt-in)
 
@@ -135,18 +146,21 @@ Status legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked
 ShellSpec specs under [`spec/`](spec/), run via [`tests/smoke.sh`](tests/smoke.sh). TAP/JUnit
 formatters available; default is documentation format.
 
-| Spec                                                                                | Target          | Mechanism | Status        | Last run    | Evidence              |
-| ----------------------------------------------------------------------------------- | --------------- | --------- | ------------- | ----------- | --------------------- |
-| [`00_preflight_spec.sh`](spec/00_preflight_spec.sh)                                  | host            | unit + e2e | `[ ]` unverified | (pending)   | TAP via `--format tap` |
-| [`10_create_fedora_cloud_spec.sh`](spec/10_create_fedora_cloud_spec.sh)              | fedora-cloud    | e2e        | `[ ]` unverified | (pending)   | TAP                   |
-| [`20_cloud_init_and_net_spec.sh`](spec/20_cloud_init_and_net_spec.sh)                | fedora-cloud    | e2e        | `[ ]` unverified | (pending)   | TAP                   |
-| [`30_ssh_and_sudo_spec.sh`](spec/30_ssh_and_sudo_spec.sh)                            | fedora-cloud    | e2e        | `[ ]` unverified | (pending)   | TAP                   |
-| [`40_snapshot_reset_spec.sh`](spec/40_snapshot_reset_spec.sh)                        | fedora-cloud    | e2e        | `[ ]` unverified | (pending)   | TAP                   |
-| [`50_cockpit_spec.sh`](spec/50_cockpit_spec.sh)                                      | fedora-cloud × 2 | e2e        | `[ ]` unverified | (pending)   | TAP                   |
-| [`60_destroy_residue_spec.sh`](spec/60_destroy_residue_spec.sh)                      | fedora-cloud    | e2e        | `[ ]` unverified | (pending)   | TAP                   |
-| [`70_idempotency_spec.sh`](spec/70_idempotency_spec.sh)                              | fedora-cloud    | e2e        | `[ ]` unverified | (pending)   | TAP                   |
-| [`80_parallel_safety_spec.sh`](spec/80_parallel_safety_spec.sh)                      | host (lock)     | unit       | `[ ]` unverified | (pending)   | TAP                   |
-| [`90_kinoite_spec.sh`](spec/90_kinoite_spec.sh)                                      | kinoite         | e2e (opt-in) | `[ ]` skipped  | (n/a)       | `VM_E2E_KINOITE=1`    |
+Smoke run `b1a4l93l1` 2026-04-25 18:31–18:36 (310.6 s). 23 examples, 2 failures, 3 warnings.
+The R-014 abort in `40_snapshot_reset_spec.sh` ended the run early — specs 50–80 did not execute.
+
+| Spec                                                                                | Target           | Mechanism    | Status                  | Last run        | Evidence                                                                     |
+| ----------------------------------------------------------------------------------- | ---------------- | ------------ | ----------------------- | --------------- | ---------------------------------------------------------------------------- |
+| [`00_preflight_spec.sh`](spec/00_preflight_spec.sh)                                  | host             | unit + e2e   | `[~]` 9 PASS / 1 FAIL   | 2026-04-25 18:31 | `dispatcher rejects unknown subcommand` — exit-code or stderr drift.          |
+| [`10_create_fedora_cloud_spec.sh`](spec/10_create_fedora_cloud_spec.sh)              | fedora-cloud     | e2e          | `[x]` 5 PASS            | 2026-04-25 18:31 | Domain, overlay, seed dir, metadata sidecar, ed25519 keypair all materialize. |
+| [`20_cloud_init_and_net_spec.sh`](spec/20_cloud_init_and_net_spec.sh)                | fedora-cloud     | e2e          | `[~]` 1 PASS / 2 WARN   | 2026-04-25 18:31 | fedoraproject.org reached; cloud-init + DNS warn on cosmetic stderr only.    |
+| [`30_ssh_and_sudo_spec.sh`](spec/30_ssh_and_sudo_spec.sh)                            | fedora-cloud     | e2e          | `[~]` 3 PASS / 1 WARN   | 2026-04-25 18:31 | Per-VM key auth + passwordless sudo + per-VM-key-active confirmed.            |
+| [`40_snapshot_reset_spec.sh`](spec/40_snapshot_reset_spec.sh)                        | fedora-cloud     | e2e          | `[~]` 1 PASS / 1 FAIL   | 2026-04-25 18:31 | "install drift" `It` has multi-`When` (R-014); fail aborts the rest of the lane. |
+| [`50_cockpit_spec.sh`](spec/50_cockpit_spec.sh)                                      | fedora-cloud × 2 | e2e          | `[!]` not run           | (n/a)            | Aborted before reach due to R-014.                                            |
+| [`60_destroy_residue_spec.sh`](spec/60_destroy_residue_spec.sh)                      | fedora-cloud     | e2e          | `[!]` not run           | (n/a)            | Aborted before reach due to R-014.                                            |
+| [`70_idempotency_spec.sh`](spec/70_idempotency_spec.sh)                              | fedora-cloud     | e2e          | `[!]` not run           | (n/a)            | Aborted before reach due to R-014.                                            |
+| [`80_parallel_safety_spec.sh`](spec/80_parallel_safety_spec.sh)                      | host (lock)      | unit         | `[!]` not run           | (n/a)            | Aborted before reach due to R-014.                                            |
+| [`90_kinoite_spec.sh`](spec/90_kinoite_spec.sh)                                      | kinoite          | e2e (opt-in) | `[ ]` skipped           | (n/a)            | `VM_E2E_KINOITE=1` — not exercised in default lane.                           |
 
 ## Supply-Chain Pin State
 
@@ -224,8 +238,10 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 | R-008 | medium   | provenance    | Bootc OCI ref is digest-pinned but not cosign-verified (Tier C2)                      | Tier C: blocked on cosign v3 / rpm-ostree compat.                     | `[ ]`  |
 | R-009 | low      | observability | Logging is human-readable text; no JSON / structured channel                          | Tier C3: optional `log_json` helper.                                  | `[ ]`  |
 | R-010 | low      | provenance    | No SBOM emitted for built kinoite qcow2                                               | Tier C3: `syft` on the cached qcow2 after build.                      | `[ ]`  |
-| R-011 | medium   | enforcement   | Pre-commit baseline ships on `chore/bootstrap-pre-commit-baseline`, not yet on `main` | Merge bootstrap → cleanup → feat in order; until then, no hooks run.  | `[~]`  |
-| R-012 | low      | enforcement   | Lint cleanup (SC2155/2034/2154/2148) ships on `chore/lint-cleanup-shellcheck`          | Stacks on bootstrap; merges with it. Feat-only fixup already on feat. | `[~]`  |
+| R-011 | medium   | enforcement   | Pre-commit baseline ships on `chore/bootstrap-pre-commit-baseline`, not yet on `main` | Merged on remote 2026-04-25; PR pending. Hooks active locally on chore/lint stack and on docs/. | `[~]`  |
+| R-012 | low      | enforcement   | Lint cleanup (SC2155/2034/2154/2148) ships on `chore/lint-cleanup-shellcheck`          | Pushed 2026-04-25; PR pending. Feat-only fixup already on feat.        | `[~]`  |
+| R-013 | medium   | network setup | Default `qemu:///session` URI has no `default` libvirt network — VM creation fails    | One-time `virsh -c qemu:///session net-define` of bridge-mode alias to system `virbr0`. Document in `setup.sh` or surface as a guided check. Workaround in place on this host. | `[~]`  |
+| R-014 | low      | tests         | `40_snapshot_reset_spec.sh` line 23 has two `When run script` blocks in one `It`, which ShellSpec rejects with "Evaluation has already been executed." | Split into two `It` blocks, or move the second invocation to a separate `It`. Mechanical refactor.                                  | `[ ]`  |
 
 ## What's Next
 
@@ -240,6 +256,23 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
+- **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` `49ecc0a`: ShellSpec specs use
+  `When run script "${VM_BIN}"` instead of `When run command "${VM_BIN}"` so the absolute
+  path resolves. Mechanical sed across 9 spec files / 20 call sites.
+- **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` `edc201f`: drop `--xtrace-only` from
+  `vm/.shellspec` so non-interactive runs don't flood stderr with "/dev/tty: No such device".
+- **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` `08f5405`: `get_ipv4` walks three
+  sources (agent → lease → arp) and skips loopback. Bridge-mode networks need ARP fallback
+  because session libvirt has no lease table. qemu-guest-agent ships in Fedora Cloud and
+  reports `lo` first, so `$1 != "lo"` is required.
+- **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` `8e22366`: fix `_CREATE_VM_ROOT` and
+  `_BK_VM_ROOT` to go up two levels from `vm/scripts/subcommands/` instead of one. Targets
+  now resolve at `vm/targets/<name>.env`.
+- **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` `2e1c338`: `setup.sh` probes
+  `virsh -c $LIBVIRT_DEFAULT_URI hostname` as the libvirt-reachable check, falling back to
+  enabling `virtqemud.socket` / `libvirtd.socket` opportunistically. Drops the rigid
+  `libvirtd.socket` assumption that breaks on Fedora 43 modular daemons. Preflight error
+  message updated likewise.
 - **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` `121c470`: pin `IMAGE_SHA256` to
   `846574c8…6c8ab2f` (Fedora-Cloud-Base-Generic-43-**1.6**.x86_64.qcow2 from
   `getfedora.org/releases.json`) and pin `OCI_DIGEST` to
@@ -274,6 +307,9 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Cross-References
 
+- Repo-wide tracker: [`../STATUS.md`](../STATUS.md) (forward-looking branch queue + verification chain)
+- Repo-wide history: [`../CHANGELOG.md`](../CHANGELOG.md)
+- Repo-wide overview: [`../README.md`](../README.md)
 - Subsystem README: [`README.md`](README.md)
 - Setup script: [`setup.sh`](setup.sh)
 - Dispatcher: [`scripts/vm`](scripts/vm)
