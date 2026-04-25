@@ -3,7 +3,7 @@
 # Each subcommand sources this once via:
 #   . "${SCRIPT_DIR}/lib/common.sh"
 #
-# Exposes: log, warn, error, die, require_cmd.
+# Exposes: log, warn, error, die, die_with, require_cmd, EXIT_* constants.
 # Honors: NO_COLOR (suppress color), TRACE=1 (xtrace).
 
 [[ -n "${_VM_LIB_COMMON_LOADED:-}" ]] && return 0
@@ -36,13 +36,32 @@ fi
 log()   { printf '%sinfo%s  %s\n' "${_C_INFO}" "${_C_RESET}" "$*" >&2; }
 warn()  { printf '%swarn%s  %s\n' "${_C_WARN}" "${_C_RESET}" "$*" >&2; }
 error() { printf '%serror%s %s\n' "${_C_ERR}"  "${_C_RESET}" "$*" >&2; }
-die()   { error "$*"; exit 1; }
+die()   { error "$*"; exit "${EXIT_GENERIC:-1}"; }
 
 [[ "${TRACE:-0}" == "1" ]] && set -o xtrace
 
 trap 'rc=$?; printf "%serror%s %s:%s: \"%s\" exited %s\n" "${_C_ERR}" "${_C_RESET}" "${BASH_SOURCE[0]}" "${LINENO}" "${BASH_COMMAND}" "${rc}" >&2' ERR
 
+# Exit-code taxonomy. Values 0/1 are conventional; 64-78 follow sysexits.h.
+# 71-72 are local extensions (sysexits.h has no slot for "network failure"
+# or "guest cloud-init failure"). Callers prefer die_with over bare exit.
+readonly EXIT_OK=0
+readonly EXIT_GENERIC=1
+readonly EXIT_USAGE=64
+readonly EXIT_PREREQ=69
+readonly EXIT_LIBVIRT=70
+readonly EXIT_NET=71
+readonly EXIT_CLOUDINIT=72
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 \
-    || die "required command not found on PATH: $1"
+    || die_with "${EXIT_PREREQ}" "required command not found on PATH: $1"
+}
+
+# die_with <code> <msg…> — log error, exit with the named code.
+# die remains a thin shim that exits EXIT_GENERIC for back-compat.
+die_with() {
+  local code="$1"; shift
+  error "$*"
+  exit "${code}"
 }
