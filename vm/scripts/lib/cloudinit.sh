@@ -17,34 +17,77 @@ readonly _VM_LIB_CLOUDINIT_LOADED=1
 
 require_cmd envsubst
 require_cmd genisoimage
+require_cmd ssh-keygen
 
 # Resolve vm/ root from this script's location: lib/ -> scripts/ -> vm/
 readonly _CLOUDINIT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly VM_ROOT="$(cd "${_CLOUDINIT_LIB_DIR}/../.." && pwd)"
 readonly CLOUDINIT_BASE_DIR="${VM_ROOT}/cloudinit/base"
+readonly CLOUDINIT_OVERLAYS_DIR="${VM_ROOT}/cloudinit/overlays"
+
+# Resolve the SSH pubkey to inject:
+#   - If VM_SSH_PUBKEY is set in the env (explicit opt-in to host key),
+#     use that file. Caller is responsible for its lifecycle.
+#   - Otherwise, generate a per-VM ephemeral ed25519 keypair under the
+#     seed dir and use that pubkey. The private half lives next to the
+#     seed and is wiped on `vm destroy`.
+# Echoes the absolute path of the pubkey file on stdout. Idempotent.
+_resolve_vm_pubkey() {
+  local vm_name="$1" seed_dir="$2"
+  if [[ -n "${VM_SSH_PUBKEY:-}" ]]; then
+    [[ -r "${VM_SSH_PUBKEY}" ]] \
+      || die_with "${EXIT_PREREQ}" "VM_SSH_PUBKEY set but not readable: ${VM_SSH_PUBKEY}"
+    printf '%s' "${VM_SSH_PUBKEY}"
+    return 0
+  fi
+  local key="${seed_dir}/ssh_key"
+  if [[ ! -f "${key}" ]]; then
+    log "generating per-VM ed25519 keypair: ${key}"
+    ssh-keygen -t ed25519 -N '' -C "vm:${vm_name}" -f "${key}" -q
+  fi
+  printf '%s' "${key}.pub"
+}
+
+# Append a cloud-init overlay fragment to the user-data, keeping the
+# rendered base intact. Overlays live at vm/cloudinit/overlays/<name>.yaml.tmpl
+# and may use the same envsubst variables as the base.
+# Args: <vm_name> <seed_dir> <overlay_name> <pubkey>
+_apply_overlay() {
+  local vm_name="$1" seed_dir="$2" overlay="$3" pubkey="$4"
+  local tmpl="${CLOUDINIT_OVERLAYS_DIR}/${overlay}.yaml.tmpl"
+  [[ -r "${tmpl}" ]] || die_with "${EXIT_USAGE}" "overlay template not found: ${tmpl}"
+  log "applying cloud-init overlay: ${overlay}"
+  VM_NAME="${vm_name}" SSH_PUBKEY="${pubkey}" \
+    envsubst '$VM_NAME $SSH_PUBKEY' \
+    < "${tmpl}" \
+    >> "${seed_dir}/user-data"
+}
 
 render_seed() {
   local vm_name="$1"
-  [[ -n "${vm_name}" ]] || die "render_seed: vm name required"
-
-  [[ -r "${VM_SSH_PUBKEY_PATH}" ]] \
-    || die "SSH pubkey not readable: ${VM_SSH_PUBKEY_PATH} (set VM_SSH_PUBKEY)"
-
-  local pubkey
-  pubkey=$(< "${VM_SSH_PUBKEY_PATH}")
+  local overlay="${2:-}"
+  [[ -n "${vm_name}" ]] || die_with "${EXIT_USAGE}" "render_seed: vm name required"
 
   local seed_dir="${SEED_DIR}/${vm_name}"
   mkdir -p "${seed_dir}"
 
+  local pubkey_path pubkey
+  pubkey_path=$(_resolve_vm_pubkey "${vm_name}" "${seed_dir}")
+  pubkey=$(< "${pubkey_path}")
+
   local f
   for f in meta-data user-data network-config; do
     [[ -r "${CLOUDINIT_BASE_DIR}/${f}.tmpl" ]] \
-      || die "missing template: ${CLOUDINIT_BASE_DIR}/${f}.tmpl"
+      || die_with "${EXIT_GENERIC}" "missing template: ${CLOUDINIT_BASE_DIR}/${f}.tmpl"
     VM_NAME="${vm_name}" SSH_PUBKEY="${pubkey}" \
       envsubst '$VM_NAME $SSH_PUBKEY' \
       < "${CLOUDINIT_BASE_DIR}/${f}.tmpl" \
       > "${seed_dir}/${f}"
   done
+
+  if [[ -n "${overlay}" ]]; then
+    _apply_overlay "${vm_name}" "${seed_dir}" "${overlay}" "${pubkey}"
+  fi
 
   local seed_iso="${seed_dir}/seed.iso"
   genisoimage -quiet \
