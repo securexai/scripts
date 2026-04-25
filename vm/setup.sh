@@ -16,7 +16,8 @@
 #   USE_LIBVIRT_GROUP=1 ./vm/setup.sh   # also add user to libvirt group
 #   TRACE=1 ./vm/setup.sh               # verbose xtrace
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 # shellcheck source=scripts/lib/common.sh
 . "${SCRIPT_DIR}/scripts/lib/common.sh"
 # shellcheck source=scripts/lib/paths.sh
@@ -52,14 +53,27 @@ ensure_packages() {
   warn "rpm-ostree may have staged a new deployment — REBOOT REQUIRED before vm subcommands work"
 }
 
-ensure_libvirtd_socket() {
-  if systemctl --user is-active --quiet libvirtd.socket; then
-    log "user libvirtd.socket already active"
+ensure_libvirt_reachable() {
+  local uri="${LIBVIRT_DEFAULT_URI:-qemu:///session}"
+  if virsh -c "${uri}" hostname >/dev/null 2>&1; then
+    log "libvirt reachable on ${uri}"
     return 0
   fi
-  log "enabling user libvirtd.socket"
-  systemctl --user enable --now libvirtd.socket \
-    || die "failed to enable libvirtd.socket — is libvirt installed and have you rebooted since rpm-ostree install?"
+  # Fedora 43 ships modular libvirt daemons (virtqemud, virtnetworkd, ...).
+  # The legacy monolithic libvirtd.socket may not exist. For qemu:///session
+  # virtqemud is auto-launched by virsh on first connect, but if a user-scope
+  # socket unit is shipped, prefer enabling it for socket-activated startup.
+  local unit
+  for unit in virtqemud.socket libvirtd.socket; do
+    systemctl --user list-unit-files "${unit}" 2>/dev/null | grep -qF "${unit}" || continue
+    log "enabling user ${unit}"
+    systemctl --user enable --now "${unit}" 2>/dev/null || continue
+    if virsh -c "${uri}" hostname >/dev/null 2>&1; then
+      log "libvirt reachable on ${uri} (via ${unit})"
+      return 0
+    fi
+  done
+  die "libvirt not reachable on ${uri} — install libvirt-daemon-driver-qemu and re-run; for qemu:///session, virtqemud auto-launches and no explicit socket is required"
 }
 
 ensure_libvirt_group() {
@@ -79,7 +93,7 @@ main() {
   require_cmd jq
 
   ensure_packages
-  ensure_libvirtd_socket
+  ensure_libvirt_reachable
   ensure_libvirt_group
 
   # Run preflight only if the libvirt clients are actually present in this

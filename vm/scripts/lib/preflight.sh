@@ -68,7 +68,7 @@ preflight_check_binaries() {
 preflight_check_virsh_reachable() {
   local uri="${LIBVIRT_URI:-qemu:///session}"
   if ! virsh -c "${uri}" hostname >/dev/null 2>&1; then
-    error "virsh cannot reach ${uri} — is libvirtd.socket active? (systemctl --user status libvirtd.socket)"
+    error "virsh cannot reach ${uri} — Fedora 43 uses modular daemons; check 'pgrep virtqemud' or 'systemctl --user list-unit-files | grep virt'"
     return 1
   fi
   return 0
