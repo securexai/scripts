@@ -17,7 +17,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/libvirt.sh
 . "${SCRIPT_DIR}/../lib/libvirt.sh"
 
-readonly _CREATE_VM_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+readonly _CREATE_VM_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly TARGETS_DIR="${_CREATE_VM_ROOT}/targets"
 
 usage() {
