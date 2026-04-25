@@ -73,21 +73,26 @@ vm_revert() {
   virsh -c "${LIBVIRT_URI}" snapshot-revert "${name}" "${snap}" --running --force >/dev/null
 }
 
-# Print first IPv4. Tries qemu-guest-agent first (only present if installed
-# in guest), falls back to libvirt's DHCP lease / ARP table.
+# Print first IPv4. Walks three sources in order:
+#   agent — qemu-guest-agent (only if installed in guest)
+#   lease — libvirt's DHCP lease table (works for NAT forward mode)
+#   arp   — host neighbor cache (required for 'bridge' forward mode where
+#           session libvirt has no lease table — the VM's MAC shows up via
+#           the host bridge's tap interface even though dnsmasq lives on
+#           the system network)
+# Returns 0 on first successful match; 1 if no source has an IPv4 yet.
 get_ipv4() {
   local name="$1"
-  local out
-  if out=$(virsh -c "${LIBVIRT_URI}" domifaddr "${name}" --source agent 2>/dev/null) \
-     && [[ -n "${out}" ]]; then
-    awk '$3 == "ipv4" { split($4, a, "/"); print a[1]; exit }' <<<"${out}"
-    return 0
-  fi
-  if out=$(virsh -c "${LIBVIRT_URI}" domifaddr "${name}" 2>/dev/null) \
-     && [[ -n "${out}" ]]; then
-    awk '$3 == "ipv4" { split($4, a, "/"); print a[1]; exit }' <<<"${out}"
-    return 0
-  fi
+  local out ip source
+  for source in agent lease arp; do
+    out=$(virsh -c "${LIBVIRT_URI}" domifaddr "${name}" --source "${source}" 2>/dev/null) \
+      || continue
+    ip=$(awk '$3 == "ipv4" && $1 != "lo" { split($4, a, "/"); print a[1]; exit }' <<<"${out}")
+    if [[ -n "${ip}" ]]; then
+      printf '%s' "${ip}"
+      return 0
+    fi
+  done
   return 1
 }
 
