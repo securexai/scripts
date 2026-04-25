@@ -45,12 +45,17 @@ trap 'rc=$?; printf "%serror%s %s:%s: \"%s\" exited %s\n" "${_C_ERR}" "${_C_RESE
 # Exit-code taxonomy. Values 0/1 are conventional; 64-78 follow sysexits.h.
 # 71-72 are local extensions (sysexits.h has no slot for "network failure"
 # or "guest cloud-init failure"). Callers prefer die_with over bare exit.
+# shellcheck disable=SC2034 # consumed by sourced subcommand scripts
 readonly EXIT_OK=0
 readonly EXIT_GENERIC=1
+# shellcheck disable=SC2034 # consumed by sourced subcommand scripts
 readonly EXIT_USAGE=64
 readonly EXIT_PREREQ=69
+# shellcheck disable=SC2034 # consumed by sourced subcommand scripts
 readonly EXIT_LIBVIRT=70
+# shellcheck disable=SC2034 # consumed by sourced subcommand scripts
 readonly EXIT_NET=71
+# shellcheck disable=SC2034 # consumed by sourced subcommand scripts
 readonly EXIT_CLOUDINIT=72
 
 require_cmd() {

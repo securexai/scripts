@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+# shellcheck shell=bash
 # Host preflight checks for the vm/ workflow. Fails fast with EXIT_PREREQ
 # and a one-line diagnostic naming the gap.
 #
@@ -105,7 +105,8 @@ preflight_check_ssh_pubkey() {
 # host libvirt socket is bind-mounted and reachable from inside.
 preflight_check_toolbox_socket() {
   [[ -e /run/.containerenv ]] || return 0
-  local sock="/run/user/$(id -u)/libvirt/virtqemud-sock"
+  local sock
+  sock="/run/user/$(id -u)/libvirt/virtqemud-sock"
   if [[ ! -S "${sock}" ]]; then
     error "inside toolbox but libvirt socket not bind-mounted: ${sock} — see DEPLOYMENT.md 'Toolbox Bridge'"
     return 1

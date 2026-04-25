@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # shellcheck shell=bash
 # ShellSpec helper — loaded by every spec file via .shellspec.
 #
@@ -13,7 +12,8 @@
 # Resolve VM_ROOT from the spec_helper's own location.
 # spec_helper.sh lives at <vm-root>/spec/spec_helper.sh.
 SPEC_HELPER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-export VM_ROOT="$(cd "${SPEC_HELPER_DIR}/.." && pwd)"
+VM_ROOT="$(cd "${SPEC_HELPER_DIR}/.." && pwd)"
+export VM_ROOT
 export VM_BIN="${VM_ROOT}/scripts/vm"
 
 # Honor the same env knobs as the dispatcher.
