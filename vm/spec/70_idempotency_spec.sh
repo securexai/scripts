@@ -14,7 +14,7 @@ Describe 'idempotency'
 
   Describe 'create'
     It 'refuses to clobber an existing domain'
-      When run command "${VM_BIN}" create --target fedora-cloud --name "${VM_NAME}"
+      When run script "${VM_BIN}" create --target fedora-cloud --name "${VM_NAME}"
       The status should not equal 0
       The stderr should include 'already exists'
     End
@@ -22,7 +22,7 @@ Describe 'idempotency'
 
   Describe 'start (already running)'
     It 'is a no-op when the domain is already running'
-      When run command "${VM_BIN}" start "${VM_NAME}"
+      When run script "${VM_BIN}" start "${VM_NAME}"
       The status should equal 0
       The stderr should include 'already running'
     End
@@ -30,12 +30,12 @@ Describe 'idempotency'
 
   Describe 'stop'
     It 'shuts down the running VM'
-      When run command "${VM_BIN}" stop "${VM_NAME}"
+      When run script "${VM_BIN}" stop "${VM_NAME}"
       The status should equal 0
     End
 
     It 'is a no-op when the domain is already stopped'
-      When run command "${VM_BIN}" stop "${VM_NAME}"
+      When run script "${VM_BIN}" stop "${VM_NAME}"
       The status should equal 0
     End
   End
@@ -57,7 +57,7 @@ Describe 'idempotency'
 
   Describe 'destroy on missing VM'
     It 'is a no-op (covered also in 60_destroy_residue)'
-      When run command "${VM_BIN}" destroy "totally-nonexistent-vm-$$"
+      When run script "${VM_BIN}" destroy "totally-nonexistent-vm-$$"
       The status should equal 0
     End
   End

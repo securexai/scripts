@@ -28,7 +28,7 @@ Describe 'kinoite (opt-in)'
   End
 
   It 'kinoite VM boots and rpm-ostree status responds'
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- 'rpm-ostree status'
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'rpm-ostree status'
     The status should equal 0
     The output should include 'Deployments'
   End

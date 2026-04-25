@@ -20,7 +20,7 @@ Describe 'parallel-safety (flock)'
     exec {HELD_FD}>"${lock}"
     flock -n "${HELD_FD}"
 
-    When run command "${VM_BIN}" create --target fedora-cloud --name "${VM_NAME}"
+    When run script "${VM_BIN}" create --target fedora-cloud --name "${VM_NAME}"
     The status should equal 70
     The stderr should include 'another vm operation is in progress'
 

@@ -50,13 +50,13 @@ Describe 'preflight'
 
   Describe 'dispatcher'
     It 'prints help and exits 0 when invoked with help'
-      When run command "${VM_BIN}" help
+      When run script "${VM_BIN}" help
       The status should equal 0
       The stderr should include 'usage: vm <subcommand>'
     End
 
     It 'rejects an unknown subcommand with EXIT_USAGE'
-      When run command "${VM_BIN}" not-a-real-subcommand
+      When run script "${VM_BIN}" not-a-real-subcommand
       The status should equal 64
       The stderr should include 'unknown subcommand'
     End

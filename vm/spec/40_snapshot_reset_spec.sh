@@ -23,13 +23,13 @@ Describe 'snapshot + reset'
   It 'install drift takes effect, then reset reverts it'
     # Install htop (drift), confirm present, reset, confirm absent.
     "${VM_BIN}" ssh "${VM_NAME}" -- 'sudo dnf install -y htop' >/dev/null 2>&1
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- 'command -v htop'
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'command -v htop'
     The status should equal 0
 
     "${VM_BIN}" reset "${VM_NAME}" "${SNAP}" >/dev/null 2>&1
     e2e_wait_ssh "${VM_NAME}" 60
 
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- 'rpm -q htop'
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'rpm -q htop'
     The status should not equal 0
   End
 

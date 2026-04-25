@@ -12,19 +12,19 @@ Describe 'cloud-init + internet'
 
   It 'cloud-init status --wait exits 0 or 2 (not fatal)'
     # The bash subshell forwards rc to ssh, but ssh exits with that code.
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- \
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- \
       'cloud-init status --wait; rc=$?; [[ $rc -ne 1 ]]'
     The status should equal 0
   End
 
   It 'reaches https://fedoraproject.org via NAT'
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- \
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- \
       'curl -fsS --max-time 5 https://fedoraproject.org -o /dev/null'
     The status should equal 0
   End
 
   It 'resolves quay.io (DNS sanity)'
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- \
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- \
       'getent hosts quay.io'
     The status should equal 0
   End

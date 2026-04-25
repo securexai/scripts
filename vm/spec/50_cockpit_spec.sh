@@ -23,7 +23,7 @@ Describe 'cockpit overlay'
 
   Describe 'with --with-cockpit'
     It 'cockpit.socket is active on the VM'
-      When run command "${VM_BIN}" ssh "${VM_WITH}" -- \
+      When run script "${VM_BIN}" ssh "${VM_WITH}" -- \
         'systemctl is-active cockpit.socket'
       The status should equal 0
       The output should equal 'active'
@@ -48,7 +48,7 @@ Describe 'cockpit overlay'
 
   Describe 'without --with-cockpit'
     It 'cockpit package is not installed on the default VM'
-      When run command "${VM_BIN}" ssh "${VM_WITHOUT}" -- 'rpm -q cockpit'
+      When run script "${VM_BIN}" ssh "${VM_WITHOUT}" -- 'rpm -q cockpit'
       The status should not equal 0
     End
 

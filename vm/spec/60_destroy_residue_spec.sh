@@ -17,7 +17,7 @@ Describe 'vm destroy — residue'
   BeforeAll 'setup'
 
   It 'vm destroy returns 0 on a created VM'
-    When run command "${VM_BIN}" destroy "${VM_NAME}"
+    When run script "${VM_BIN}" destroy "${VM_NAME}"
     The status should equal 0
   End
 
@@ -45,7 +45,7 @@ Describe 'vm destroy — residue'
   End
 
   It 'destroy on a missing VM is a no-op (idempotent)'
-    When run command "${VM_BIN}" destroy "${VM_NAME}"
+    When run script "${VM_BIN}" destroy "${VM_NAME}"
     The status should equal 0
   End
 End

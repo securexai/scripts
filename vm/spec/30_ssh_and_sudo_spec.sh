@@ -13,12 +13,12 @@ Describe 'ssh + sudo'
   AfterAll  'cleanup'
 
   It 'vm ssh runs a remote command non-interactively'
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- true
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- true
     The status should equal 0
   End
 
   It 'passwordless sudo works for the default user'
-    When run command "${VM_BIN}" ssh "${VM_NAME}" -- 'sudo -n id -u'
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'sudo -n id -u'
     The status should equal 0
     The output should equal '0'
   End
