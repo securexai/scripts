@@ -4,11 +4,11 @@
 supply-chain pins (`IMAGE_SHA256`, `OCI_DIGEST`) ship empty by design and
 must be set before first `vm create`.
 
-**Last verified:** 2026-04-24
+**Last verified:** 2026-04-25
 
 **Owner:** [@securexai](https://github.com/securexai)
 
-**Doc version:** 1.0
+**Doc version:** 1.1
 
 **Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD)
 
@@ -30,6 +30,11 @@ must be set before first `vm create`.
 This document covers the `vm/` subsystem of the `scripts` repo. It does not cover the untracked
 `bash/` directory, the deleted `skill-forced-eval-hook.sh`, or the broader repo. Everything
 referenced here lives under `vm/`.
+
+Repo-wide enforcement (pre-commit hooks, betterleaks secret scanning, commitlint, markdownlint,
+shellcheck/shfmt baseline) ships from sibling branches `chore/bootstrap-pre-commit-baseline` and
+`chore/lint-cleanup-shellcheck`. See the root [`CHANGELOG.md`](../CHANGELOG.md) and
+[`README.md`](../README.md) for repo-level scope.
 
 ## Host Prerequisites
 
@@ -218,6 +223,8 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 | R-008 | medium   | provenance    | Bootc OCI ref is digest-pinned but not cosign-verified (Tier C2)                      | Tier C: blocked on cosign v3 / rpm-ostree compat.                     | `[ ]`  |
 | R-009 | low      | observability | Logging is human-readable text; no JSON / structured channel                          | Tier C3: optional `log_json` helper.                                  | `[ ]`  |
 | R-010 | low      | provenance    | No SBOM emitted for built kinoite qcow2                                               | Tier C3: `syft` on the cached qcow2 after build.                      | `[ ]`  |
+| R-011 | medium   | enforcement   | Pre-commit baseline ships on `chore/bootstrap-pre-commit-baseline`, not yet on `main` | Merge bootstrap → cleanup → feat in order; until then, no hooks run.  | `[~]`  |
+| R-012 | low      | enforcement   | Lint cleanup (SC2155/2034/2154/2148) ships on `chore/lint-cleanup-shellcheck`          | Stacks on bootstrap; merges with it. Feat-only fixup already on feat. | `[~]`  |
 
 ## What's Next
 
@@ -232,6 +239,18 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
+- **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` HEAD `97e5035`: feat-only lint fixup —
+  drop shebang + add `# shellcheck shell=bash` to `preflight.sh`; SC2155 split in
+  `preflight.sh::preflight_check_toolbox_socket` and `spec_helper.sh::VM_ROOT`; SC2034
+  directives on the `EXIT_*` constants in `common.sh`.
+- **2026-04-25** — `chore/lint-cleanup-shellcheck` `e4e7fbb` *(stacked on bootstrap)*: clear
+  SC2155/2034/2154/2148 warnings across 20 main-resident files (split `readonly X="$(cmd)"`
+  patterns; directives for sourced-library vars and trap `rc=$?`; replace lib shebangs with
+  `# shellcheck shell=bash`).
+- **2026-04-25** — `chore/bootstrap-pre-commit-baseline` `e1e70ff`: drop the repo enforcement
+  baseline at root — `.pre-commit-config.yaml`, `.betterleaks.toml`, `commitlint.config.js`,
+  `.markdownlint-cli2.yaml`, `.editorconfig`, `mise.toml`. Materialized by the
+  `repo-bootstrap` skill.
 - **2026-04-24** — `feat/vm-hardening-e2e-deploy-doc`: lib/preflight, exit-code taxonomy,
   bib cache digest re-verify, per-VM ephemeral SSH keys, `--with-cockpit` overlay, cloud-init
   readiness gate, flock parallel-safety, ShellSpec e2e suite, this document.
