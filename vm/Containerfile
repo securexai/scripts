@@ -25,12 +25,30 @@ LABEL org.opencontainers.image.description="scripts-toolbox + virt-install/virsh
 # - genisoimage: builds NoCloud cloud-init seed ISOs.
 # - podman: client used by the bib pipeline. Image build itself runs under
 #   the host's podman via socket-forwarding or `flatpak-spawn --host`.
+#
+# Dev/test tooling (lint + e2e):
+# - shellspec: ShellSpec runner for the vm/spec/ suite (pure bash).
+# - ShellCheck: static analyzer for shell scripts (CLAUDE.md standard).
+# - shfmt: shell formatter (CLAUDE.md standard).
+# - nodejs + corepack: enables pnpm-managed install of markdownlint-cli2.
 RUN dnf install -y --setopt=install_weak_deps=False \
       libvirt-client \
       virt-install \
       genisoimage \
       podman \
+      shellspec \
+      ShellCheck \
+      shfmt \
+      nodejs \
+      flock \
  && dnf clean all \
  && rm -rf /var/cache/dnf
+
+# pnpm via corepack; install markdownlint-cli2 globally for doc linting.
+# Pinning to a specific minor avoids surprise rule changes between CI
+# runs; bump deliberately.
+RUN corepack enable \
+ && corepack prepare pnpm@9.15.0 --activate \
+ && pnpm add -g markdownlint-cli2@0.18.0
 
 CMD ["/bin/bash"]
