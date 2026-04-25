@@ -104,21 +104,50 @@ _ssh_opts=(
   -o ConnectTimeout=5
 )
 
+# Compose identity args for a VM. If a per-VM ephemeral key was generated
+# at create time (by cloudinit.sh::_resolve_vm_pubkey), use it explicitly
+# with IdentitiesOnly=yes so the agent or other configured identities
+# don't shadow it. Empty array if no per-VM key exists (user opted in to
+# host key via VM_SSH_PUBKEY, or this is a legacy VM created pre-B1).
+_vm_identity_args() {
+  local name="$1"
+  local key="${SEED_DIR}/${name}/ssh_key"
+  if [[ -f "${key}" ]]; then
+    printf -- '-i\n%s\n-o\nIdentitiesOnly=yes\n' "${key}"
+  fi
+}
+
 ssh_to() {
   local name="$1"; shift
   local user="${DEFAULT_USER:-fedora}" ip
-  ip=$(get_ipv4 "${name}") || die "no IPv4 address yet for ${name}"
-  exec ssh "${_ssh_opts[@]}" "${user}@${ip}" "$@"
+  ip=$(get_ipv4 "${name}") || die_with "${EXIT_LIBVIRT}" "no IPv4 address yet for ${name}"
+  local id_args=()
+  mapfile -t id_args < <(_vm_identity_args "${name}")
+  exec ssh "${_ssh_opts[@]}" "${id_args[@]}" "${user}@${ip}" "$@"
+}
+
+# Non-exec variant for callers that need to keep running after the
+# remote command finishes (readiness gates, probes, internal scripts).
+# Returns the remote exit code.
+vm_ssh_run() {
+  local name="$1"; shift
+  local user="${DEFAULT_USER:-fedora}" ip
+  ip=$(get_ipv4 "${name}") || die_with "${EXIT_LIBVIRT}" "no IPv4 address yet for ${name}"
+  local id_args=()
+  mapfile -t id_args < <(_vm_identity_args "${name}")
+  ssh "${_ssh_opts[@]}" "${id_args[@]}" "${user}@${ip}" "$@"
 }
 
 wait_for_ssh() {
   local name="$1" timeout="${2:-180}"
   local user="${DEFAULT_USER:-fedora}" ip
   log "waiting up to ${timeout}s for SSH on ${name}"
+  local id_args=()
+  mapfile -t id_args < <(_vm_identity_args "${name}")
   local end=$(( SECONDS + timeout ))
   while (( SECONDS < end )); do
     if ip=$(get_ipv4 "${name}") && [[ -n "${ip}" ]]; then
-      if ssh "${_ssh_opts[@]}" "${user}@${ip}" true 2>/dev/null; then
+      if ssh "${_ssh_opts[@]}" "${id_args[@]}" "${user}@${ip}" true 2>/dev/null; then
         log "SSH ready: ${user}@${ip}"
         printf '%s' "${ip}"
         return 0
@@ -126,5 +155,5 @@ wait_for_ssh() {
     fi
     sleep 3
   done
-  die "timed out waiting for SSH to ${name} (${timeout}s)"
+  die_with "${EXIT_NET}" "timed out waiting for SSH to ${name} (${timeout}s)"
 }
