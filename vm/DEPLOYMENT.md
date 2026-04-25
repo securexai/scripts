@@ -1,14 +1,15 @@
 # vm/ Deployment & Test Status
 
-**Status:** yellow / pre-pin — code is complete and passes preflight; two
-supply-chain pins (`IMAGE_SHA256`, `OCI_DIGEST`) ship empty by design and
-must be set before first `vm create`.
+**Status:** yellow / pinned, tests pending — code is complete, preflight
+passes, and `IMAGE_SHA256` + `OCI_DIGEST` are pinned. The default
+ShellSpec lane has not yet been run end-to-end against a real libvirt
+host; flip to green once it passes cleanly.
 
 **Last verified:** 2026-04-25
 
 **Owner:** [@securexai](https://github.com/securexai)
 
-**Doc version:** 1.1
+**Doc version:** 1.2
 
 **Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD)
 
@@ -18,12 +19,12 @@ must be set before first `vm create`.
 
 - The vm/ subsystem is a self-contained Fedora 43 libvirt + cloud-init test rig with a 10-subcommand
   CLI, per-VM ephemeral SSH keys, an opt-in cockpit overlay, and a ShellSpec end-to-end suite.
-- It is **not deployable today as a fresh checkout**: `vm create` will fail loudly until the
-  upstream digest pins are set in [`targets/fedora-cloud.env`](targets/fedora-cloud.env) and
-  [`targets/kinoite.env`](targets/kinoite.env). This is intentional; see
-  [Supply-Chain Pin State](#supply-chain-pin-state).
-- All 10 ShellSpec specs run via `./tests/smoke.sh`; the kinoite lane is opt-in
-  (`VM_E2E_KINOITE=1`).
+- The two upstream digest pins (`IMAGE_SHA256`, `OCI_DIGEST`) are now **set**
+  ([`targets/fedora-cloud.env:17`](targets/fedora-cloud.env),
+  [`targets/kinoite.env:21`](targets/kinoite.env)). `vm create` no longer fails fast on
+  missing pins. `BIB_VERSION="latest"` remains pending (R-003).
+- The default ShellSpec lane runs via `./tests/smoke.sh`; the kinoite lane is opt-in
+  (`VM_E2E_KINOITE=1`). Neither has been run end-to-end yet on this host.
 
 ## Scope
 
@@ -93,9 +94,9 @@ Status legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked
 
 | #     | Item                | Source                                                | Status | Notes                                                 |
 | ----- | ------------------- | ----------------------------------------------------- | ------ | ----------------------------------------------------- |
-| 2.1   | `IMAGE_SHA256` set  | [`targets/fedora-cloud.env:17`](targets/fedora-cloud.env) | `[!]` | Empty by design; see how-to in env file header.       |
-| 2.2   | `OCI_DIGEST` set    | [`targets/kinoite.env:19`](targets/kinoite.env)            | `[!]` | Empty by design; see how-to in env file header.       |
-| 2.3   | `BIB_VERSION` pinned | [`targets/kinoite.env:22`](targets/kinoite.env)           | `[ ]`  | Currently `latest`; pin numeric tag after first build. |
+| 2.1   | `IMAGE_SHA256` set  | [`targets/fedora-cloud.env:17`](targets/fedora-cloud.env) | `[x]`  | Pinned 2026-04-25 from getfedora.org/releases.json.   |
+| 2.2   | `OCI_DIGEST` set    | [`targets/kinoite.env:21`](targets/kinoite.env)            | `[x]`  | Pinned 2026-04-25 via `skopeo inspect`.               |
+| 2.3   | `BIB_VERSION` pinned | [`targets/kinoite.env:24`](targets/kinoite.env)           | `[ ]`  | Currently `latest`; pin numeric tag after first build. |
 
 ### Phase 3 — First fedora-cloud VM
 
@@ -149,11 +150,11 @@ formatters available; default is documentation format.
 
 ## Supply-Chain Pin State
 
-| Pin             | Current  | Source                                                                | How to set                                                                                                                                                         |
-| --------------- | -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `IMAGE_SHA256`  | (unset)  | [`targets/fedora-cloud.env:17`](targets/fedora-cloud.env)              | `curl -fsSL .../Fedora-Cloud-43-x86_64-CHECKSUM \| grep -E '^SHA256.*Fedora-Cloud-Base.*x86_64\.qcow2'` (full URL in env file header)                              |
-| `OCI_DIGEST`    | (unset)  | [`targets/kinoite.env:19`](targets/kinoite.env)                        | `podman pull quay.io/fedora-ostree-desktops/kinoite:43 && podman inspect --format '{{.Digest}}' quay.io/fedora-ostree-desktops/kinoite:43`                          |
-| `BIB_VERSION`   | `latest` | [`targets/kinoite.env:22`](targets/kinoite.env)                        | Pick a numeric tag from [quay.io/centos-bootc/bootc-image-builder tags](https://quay.io/repository/centos-bootc/bootc-image-builder?tab=tags) after first build.   |
+| Pin             | Current                       | Source                                                                | How to re-pin                                                                                                                                                       |
+| --------------- | ----------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IMAGE_SHA256`  | `846574c8…6c8ab2f` (43-1.6)   | [`targets/fedora-cloud.env:17`](targets/fedora-cloud.env)              | `curl -fsSL https://getfedora.org/releases.json \| jq -r '.[] \| select(.version=="43" and .arch=="x86_64" and .subvariant=="Cloud_Base") \| .sha256'`              |
+| `OCI_DIGEST`    | `sha256:8fae1047…c4a9225c`    | [`targets/kinoite.env:21`](targets/kinoite.env)                        | `skopeo inspect docker://quay.io/fedora-ostree-desktops/kinoite:43 \| jq -r .Digest` (no pull required)                                                              |
+| `BIB_VERSION`   | `latest`                      | [`targets/kinoite.env:24`](targets/kinoite.env)                        | Quay's bootc-image-builder no longer publishes recent `latest-NNNN` snapshot tags; pinning a digest needs a `bib.sh` change from `:tag` to `@digest` (deferred — R-003). |
 
 ## Verification Runbook
 
@@ -213,8 +214,8 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 | ID    | Severity | Area          | Description                                                                          | Mitigation                                                            | Status |
 | ----- | -------- | ------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- | ------ |
-| R-001 | high     | supply chain  | `IMAGE_SHA256` empty until pinned                                                    | `ensure_image` fails fast; pin per Fedora point release.              | `[!]`  |
-| R-002 | high     | supply chain  | `OCI_DIGEST` empty until pinned                                                      | `build_kinoite_qcow` fails fast; pin per OCI bump.                    | `[!]`  |
+| R-001 | high     | supply chain  | `IMAGE_SHA256` empty until pinned                                                    | Pinned 2026-04-25 (43-1.6, `846574c8…`).                              | `[x]`  |
+| R-002 | high     | supply chain  | `OCI_DIGEST` empty until pinned                                                      | Pinned 2026-04-25 (`sha256:8fae1047…`).                               | `[x]`  |
 | R-003 | medium   | supply chain  | `BIB_VERSION="latest"` (FIXME at `targets/kinoite.env:21`)                           | Pin numeric tag after first green build.                              | `[ ]`  |
 | R-004 | medium   | coverage      | Kinoite e2e is opt-in; not part of default lane                                      | Promote `90_kinoite_spec.sh` once cache + pin are stable.             | `[ ]`  |
 | R-005 | low      | host drift    | Fedora point-release bumps require manual `IMAGE_URL` update                          | Tracked here; not automated.                                          | `[ ]`  |
@@ -239,6 +240,12 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
+- **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` `121c470`: pin `IMAGE_SHA256` to
+  `846574c8…6c8ab2f` (Fedora-Cloud-Base-Generic-43-**1.6**.x86_64.qcow2 from
+  `getfedora.org/releases.json`) and pin `OCI_DIGEST` to
+  `sha256:8fae1047…c4a9225c` via `skopeo inspect`. Closes R-001 + R-002.
+  R-003 (`BIB_VERSION="latest"`) stays open — quay's bib repo no longer publishes
+  recent `latest-NNNN` snapshot tags, so digest-pinning would need a code change.
 - **2026-04-25** — `feat/vm-hardening-e2e-deploy-doc` HEAD `97e5035`: feat-only lint fixup —
   drop shebang + add `# shellcheck shell=bash` to `preflight.sh`; SC2155 split in
   `preflight.sh::preflight_check_toolbox_socket` and `spec_helper.sh::VM_ROOT`; SC2034
