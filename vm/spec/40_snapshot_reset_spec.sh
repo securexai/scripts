@@ -28,6 +28,7 @@ Describe 'snapshot + reset'
     "${VM_BIN}" ssh "${VM_NAME}" -- 'sudo dnf install -y htop' >/dev/null 2>&1
     When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'command -v htop'
     The status should equal 0
+    The output should include 'htop'
   End
 
   It 'reset reverts the drift (htop absent after snapshot revert)'
@@ -35,6 +36,7 @@ Describe 'snapshot + reset'
     e2e_wait_ssh "${VM_NAME}" 60
     When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'rpm -q htop'
     The status should not equal 0
+    The output should include 'not installed'
   End
 
   It 'snapshot still present after reset'

@@ -5,7 +5,7 @@
 # answers via ssh, destroy leaves no residue.
 
 Describe 'kinoite (opt-in)'
-  Skip if 'VM_E2E_KINOITE=1 not set' [[ -z "${VM_E2E_KINOITE:-}" ]]
+  Skip if 'VM_E2E_KINOITE=1 not set' [ -z "${VM_E2E_KINOITE:-}" ]
 
   VM_NAME=$(e2e_vm_name)
 

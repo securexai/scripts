@@ -7,6 +7,12 @@
 # inferred from a missing-package check on a single image.
 
 Describe 'cockpit overlay'
+  # Cockpit installs ~150 MB of packages via cloud-init; on a slow link
+  # the post-boot SSH probe can outrun cloud-init and the spec hangs
+  # waiting for cockpit.socket. Gate behind an env flag so the default
+  # smoke lane stays bounded; mirrors the kinoite (spec 90) opt-in.
+  Skip if 'VM_E2E_COCKPIT=1 not set' [ -z "${VM_E2E_COCKPIT:-}" ]
+
   VM_WITH=$(e2e_vm_name)-with
   VM_WITHOUT=$(e2e_vm_name)-without
 

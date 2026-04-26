@@ -19,6 +19,7 @@ Describe 'vm destroy — residue'
   It 'vm destroy returns 0 on a created VM'
     When run script "${VM_BIN}" destroy "${VM_NAME}"
     The status should equal 0
+    The stderr should be defined
   End
 
   It 'domain is gone from virsh list --all'
@@ -47,5 +48,6 @@ Describe 'vm destroy — residue'
   It 'destroy on a missing VM is a no-op (idempotent)'
     When run script "${VM_BIN}" destroy "${VM_NAME}"
     The status should equal 0
+    The stderr should be defined
   End
 End

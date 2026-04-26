@@ -26,8 +26,14 @@ Describe 'ssh + sudo'
   It 'password auth is refused (PubkeyAuthentication=no)'
     # Probe the VM IP directly with options that force password auth.
     # Should fail closed (BatchMode + no password method available).
-    ip=$(virsh -c "${LIBVIRT_DEFAULT_URI}" domifaddr "${VM_NAME}" \
-         | awk '$3=="ipv4"{split($4,a,"/");print a[1];exit}')
+    # Walk agent → lease → arp like get_ipv4 does — bridge-mode session
+    # libvirt has no lease table.
+    ip=''
+    for src in agent lease arp; do
+      ip=$(virsh -c "${LIBVIRT_DEFAULT_URI}" domifaddr "${VM_NAME}" --source "$src" 2>/dev/null \
+           | awk '$3=="ipv4" && $1!="lo" {split($4,a,"/");print a[1];exit}')
+      [[ -n "$ip" ]] && break
+    done
     When run command ssh \
       -o BatchMode=yes \
       -o StrictHostKeyChecking=accept-new \
@@ -37,6 +43,7 @@ Describe 'ssh + sudo'
       -o ConnectTimeout=5 \
       "fedora@${ip}" true
     The status should not equal 0
+    The stderr should be defined
   End
 
   It 'per-VM key (B1) is the active identity'

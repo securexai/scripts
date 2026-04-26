@@ -32,11 +32,13 @@ Describe 'idempotency'
     It 'shuts down the running VM'
       When run script "${VM_BIN}" stop "${VM_NAME}"
       The status should equal 0
+      The stderr should be defined
     End
 
     It 'is a no-op when the domain is already stopped'
       When run script "${VM_BIN}" stop "${VM_NAME}"
       The status should equal 0
+      The stderr should be defined
     End
   End
 
@@ -59,6 +61,7 @@ Describe 'idempotency'
     It 'is a no-op (covered also in 60_destroy_residue)'
       When run script "${VM_BIN}" destroy "totally-nonexistent-vm-$$"
       The status should equal 0
+      The stderr should be defined
     End
   End
 End
