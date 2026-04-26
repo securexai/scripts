@@ -23,12 +23,18 @@ require_cmd ssh
 
 vm_define() {
   local name="$1" disk="$2" seed="$3" os_variant="$4" vcpus="$5" mem_mib="$6"
-  log "defining domain ${name} (vcpus=${vcpus}, mem=${mem_mib}MiB, disk=${disk})"
+  log "defining domain ${name} (vcpus=${vcpus}, mem=${mem_mib}MiB, disk=${disk}, firmware=uefi)"
+  # firmware=efi: libvirt picks an OVMF code+vars pair from its firmware
+  # descriptor list (requires edk2-ovmf on host). NVRAM lives under
+  # ${LIBVIRT_PREFIX}/qemu/nvram/<name>_VARS.fd and is cleaned up by
+  # vm_undefine via --nvram. Secure Boot stays disabled by default —
+  # bootc/cloud images aren't shim-signed for the libvirt enrollment chain.
   virt-install --connect "${LIBVIRT_URI}" \
     --name "${name}" \
     --memory "${mem_mib}" \
     --vcpus "${vcpus}" \
     --import \
+    --boot firmware=efi \
     --disk "path=${disk},bus=virtio,format=qcow2" \
     --disk "path=${seed},device=cdrom,readonly=on" \
     --os-variant "${os_variant}" \

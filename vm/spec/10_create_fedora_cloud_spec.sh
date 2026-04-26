@@ -39,4 +39,15 @@ Describe 'vm create --target fedora-cloud'
     The path "${STATE}/seeds/${VM_NAME}/ssh_key"     should be exist
     The path "${STATE}/seeds/${VM_NAME}/ssh_key.pub" should be exist
   End
+
+  It 'boots in UEFI mode (host XML uses firmware=efi)'
+    When run command virsh -c "${LIBVIRT_DEFAULT_URI}" dumpxml "${VM_NAME}"
+    The status should equal 0
+    The output should include "firmware='efi'"
+  End
+
+  It 'guest sees /sys/firmware/efi (UEFI runtime present)'
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'test -d /sys/firmware/efi'
+    The status should equal 0
+  End
 End
