@@ -58,7 +58,14 @@ vm_destroy() {
 
 vm_undefine() {
   local name="$1"
-  virsh -c "${LIBVIRT_URI}" undefine "${name}" --nvram >/dev/null 2>&1 || true
+  # --snapshots-metadata is required for domains that ever had a snapshot:
+  # libvirt refuses 'undefine' with 'cannot delete inactive domain with N
+  # snapshots' otherwise. The on-disk snapshot data lives inside the qcow2
+  # which the caller deletes anyway; this only purges libvirt's metadata.
+  # --checkpoints-metadata is the parallel option for incremental backups.
+  virsh -c "${LIBVIRT_URI}" undefine "${name}" \
+    --nvram --snapshots-metadata --checkpoints-metadata \
+    >/dev/null 2>&1 || true
 }
 
 vm_snapshot() {
