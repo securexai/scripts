@@ -1,22 +1,22 @@
 # vm/ Deployment & Test Status
 
-**Status:** green / smoke green — host bootstrap green; default lane
-runs **24 examples · 0 failures · 0 warnings · 0 errors** in 307–319 s.
-The opt-in lanes (`50_cockpit_spec.sh`, `90_kinoite_spec.sh`) are gated
-behind `VM_E2E_COCKPIT=1` and `VM_E2E_KINOITE=1` respectively and stay
-out of the default suite. ShellSpec's reporter still clings to its
-internal `aborted=1` flag at end-of-suite even though every example
-passed; `tests/smoke.sh` interprets "0 failures, 0 errors, aborted by an
-unexpected error" as success — the test results are the authoritative
-signal (R-015).
+**Status:** green / smoke green + bootc lane proven — default ShellSpec
+lane runs **24 examples · 0 failures · 0 warnings · 0 errors** in
+307–319 s. Both targets boot UEFI: Fedora 43 Cloud
+(`./scripts/vm create --target fedora-cloud`) and a derived bootc image
+(`./scripts/vm create --target kinoite`, backed by
+`vm/Containerfile.bootc` — `centos-bootc:stream9` + cloud-init).
+SSH-key login confirmed on both. The literal "Kinoite-with-KDE" intent
+remains R-017 (upstream f43 bootc bases lack the `DefaultRootFs`
+metadata bib `latest` requires).
 
 **Last verified:** 2026-04-26
 
 **Owner:** [@securexai](https://github.com/securexai)
 
-**Doc version:** 1.4
+**Doc version:** 1.5
 
-**Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD `deb3bef`)
+**Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD `8af294f`)
 
 ---
 
@@ -34,6 +34,13 @@ signal (R-015).
 - The default ShellSpec lane runs via `./tests/smoke.sh` and is **green**: 24 examples,
   0 failures, 0 warnings, 0 errors. Cockpit and kinoite specs are opt-in
   (`VM_E2E_COCKPIT=1`, `VM_E2E_KINOITE=1`) so heavy installs stay out of the default lane.
+- All VMs boot UEFI (OVMF firmware via `--boot firmware=efi`); per-VM NVRAM lives in
+  `~/.config/libvirt/qemu/nvram/<name>_VARS.qcow2` and is cleaned up by `vm destroy`.
+- The bootc lane is now proven end-to-end via a derived OCI: build with
+  `sudo podman build -t localhost/scripts-vm-bootc:latest -f vm/Containerfile.bootc vm/`
+  then `BIB_ROOTFUL=1 ./scripts/vm build-kinoite`; result is a working CentOS Stream 9
+  bootc VM with cloud-init injecting the per-VM SSH key into `core` (UEFI, sudo, network).
+  Re-aiming this at a real Fedora-bootc-Kinoite base is gated on R-017.
 - Host prerequisite: a session-scope `default` libvirt network (R-013) — the scripts
   default to `qemu:///session` for rootless XDG paths, but libvirt's stock `default` NAT
   network only exists in `qemu:///system`. See Phase 1.5 below for the one-time setup.
@@ -280,6 +287,23 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
+- **2026-04-26** — `feat/vm-hardening-e2e-deploy-doc` `8af294f`: bootc lane works end-to-end
+  via a derived OCI. New `vm/Containerfile.bootc` layers cloud-init + systemd enables on
+  `centos-bootc:stream9`; `bib.sh` learns to consume `localhost/...` refs (skip pull, pass
+  bare ref to bib — `containers-storage:` transport is rejected by bib's parser);
+  `cloudinit.sh` threads `DEFAULT_USER` through envsubst so the new explicit `users:` block
+  in `user-data.tmpl` injects the per-VM key into the right login user;
+  `targets/kinoite.toml` drops `customizations.services` (rejected by bib `latest`); systemd
+  state moves into the derived image. Verified: CentOS Stream 9 bootc VM, kernel 5.14, UEFI,
+  passwordless sudo for `core`, cloud-init 24.4, bootc 1.14.1.
+- **2026-04-26** — `feat/vm-hardening-e2e-deploy-doc` `ecbcb62`: all VMs boot UEFI by
+  default (`--boot firmware=efi`). Spec 10 grew two regression checks (host XML uses
+  `firmware='efi'`; guest sees `/sys/firmware/efi`).
+- **2026-04-26** — `feat/vm-hardening-e2e-deploy-doc` `6b43b86` + `3505c19` + `3005e24`:
+  `BIB_ROOTFUL=1` opt-in (rootless bib can't remount privileged sandbox); kinoite TOML
+  schema corrected to single-table form; R-017 widened to "bib `latest` metadata schema is
+  ahead of f43 bootc base images" (diagnostic with fedora-bootc:43 reproduced the same
+  `DefaultRootFs missing` error).
 - **2026-04-26** — `feat/vm-hardening-e2e-deploy-doc` `deb3bef`: cockpit + kinoite Skip-if
   predicates use POSIX `[ ]` (ShellSpec evaluates predicates in a POSIX subshell where
   bash's `[[` isn't a builtin); add `The output/stderr should be defined` matchers on
