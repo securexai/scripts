@@ -20,9 +20,20 @@ readonly _VM_LIB_BIB_LOADED=1
 readonly _BIB_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly _BIB_VM_ROOT="$(cd "${_BIB_LIB_DIR}/../.." && pwd)"
 
-# Pick the right podman invocation: host podman directly when on the host,
-# `flatpak-spawn --host podman` from inside a toolbox/flatpak sandbox.
+# Pick the right podman invocation. Three contexts:
+#   1. BIB_ROOTFUL=1 — use `sudo podman` (rootful). bootc-image-builder
+#      needs CAP_SYS_ADMIN to remount its sandbox; rootless privileged
+#      podman fails with "Failed to remount /: Permission denied" on
+#      Fedora 43+. Requires passwordless sudo (`sudo -n true`).
+#   2. Inside a toolbox/flatpak sandbox: `flatpak-spawn --host podman`.
+#   3. Default: rootless `podman` on the host.
 _resolve_podman() {
+  if [[ "${BIB_ROOTFUL:-0}" == "1" ]]; then
+    sudo -n true 2>/dev/null \
+      || die_with "${EXIT_PREREQ}" "BIB_ROOTFUL=1 needs passwordless sudo for 'sudo podman'"
+    printf 'sudo podman'
+    return 0
+  fi
   if [[ -e /run/.containerenv ]] && command -v flatpak-spawn >/dev/null 2>&1; then
     printf 'flatpak-spawn --host podman'
     return 0
@@ -91,15 +102,30 @@ build_kinoite_qcow() {
   log "pulling ${oci_ref}@${oci_digest}"
   ${_PODMAN} pull "${oci_ref}@${oci_digest}" >/dev/null
 
+  # Rootful bib needs the host's container storage mounted so it can
+  # resolve the OCI ref we just pulled (ref lives in root's libpod store,
+  # which the bib container otherwise can't see).
+  local store_mount=()
+  if [[ "${BIB_ROOTFUL:-0}" == "1" ]]; then
+    store_mount+=(-v /var/lib/containers/storage:/var/lib/containers/storage)
+  fi
+
   log "running bootc-image-builder ${bib_version}"
   # shellcheck disable=SC2086
   ${_PODMAN} run --rm --privileged --security-opt label=disable \
+    "${store_mount[@]}" \
     -v "${bib_config}:/config.toml:ro" \
     -v "${out_dir}:/output" \
     "quay.io/centos-bootc/bootc-image-builder:${bib_version}" \
     --type qcow2 \
     --config /config.toml \
     "${oci_ref}@${oci_digest}"
+
+  # Rootful bib writes /output as uid 0 on the host. Reclaim ownership
+  # so libvirt's session URI can read the qcow2 without escalation.
+  if [[ "${BIB_ROOTFUL:-0}" == "1" ]]; then
+    sudo chown -R "$(id -u):$(id -g)" "${out_dir}"
+  fi
 
   [[ -f "${qcow}" ]] || die_with "${EXIT_GENERIC}" "bib finished but expected output not found: ${qcow}"
 

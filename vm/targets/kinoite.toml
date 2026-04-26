@@ -20,14 +20,14 @@
 name = "core"
 groups = ["wheel"]
 
-[[customizations.services.enabled]]
-name = "cloud-init.service"
-
-[[customizations.services.enabled]]
-name = "cloud-config.service"
-
-[[customizations.services.enabled]]
-name = "cloud-final.service"
-
-[[customizations.services.enabled]]
-name = "cloud-init-local.service"
+# bib's customizations.services schema is a single table with `enabled`
+# as a string array — not an array-of-tables. Earlier versions accepted
+# the array-of-tables form; current bib (>= 2025-12) hard-fails with
+# `incompatible types: TOML value has type map[string]any` on it.
+[customizations.services]
+enabled = [
+  "cloud-init.service",
+  "cloud-config.service",
+  "cloud-final.service",
+  "cloud-init-local.service",
+]

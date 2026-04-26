@@ -14,30 +14,21 @@
 # layered separately — see kinoite.toml notes) for the per-VM seed ISO
 # (SSH keys, hostname) to apply.
 
+[customizations]
+packages = ["cockpit", "cockpit-system", "cockpit-machines"]
+
 [[customizations.user]]
 name = "core"
 groups = ["wheel"]
 
-[[customizations.services.enabled]]
-name = "cloud-init.service"
-
-[[customizations.services.enabled]]
-name = "cloud-config.service"
-
-[[customizations.services.enabled]]
-name = "cloud-final.service"
-
-[[customizations.services.enabled]]
-name = "cloud-init-local.service"
-
-[[customizations.services.enabled]]
-name = "cockpit.socket"
-
-[[customizations.packages]]
-name = "cockpit"
-
-[[customizations.packages]]
-name = "cockpit-system"
-
-[[customizations.packages]]
-name = "cockpit-machines"
+# bib's customizations.services schema is a single table with `enabled`
+# as a string array. customizations.packages likewise expects a list of
+# package names, not an array-of-tables.
+[customizations.services]
+enabled = [
+  "cloud-init.service",
+  "cloud-config.service",
+  "cloud-final.service",
+  "cloud-init-local.service",
+  "cockpit.socket",
+]
