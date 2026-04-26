@@ -20,15 +20,19 @@ Describe 'snapshot + reset'
     The output should include "${SNAP}"
   End
 
-  It 'install drift takes effect, then reset reverts it'
-    # Install htop (drift), confirm present, reset, confirm absent.
+  # Drift + reset is a two-stage assertion: install htop (drift), confirm
+  # present, then reset and confirm absent. ShellSpec rejects multiple
+  # `When` blocks in one `It`, so the two stages live in adjacent `It`s
+  # whose ordering is preserved by ShellSpec within a Describe/Context.
+  It 'install drift takes effect (htop present after dnf install)'
     "${VM_BIN}" ssh "${VM_NAME}" -- 'sudo dnf install -y htop' >/dev/null 2>&1
     When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'command -v htop'
     The status should equal 0
+  End
 
+  It 'reset reverts the drift (htop absent after snapshot revert)'
     "${VM_BIN}" reset "${VM_NAME}" "${SNAP}" >/dev/null 2>&1
     e2e_wait_ssh "${VM_NAME}" 60
-
     When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'rpm -q htop'
     The status should not equal 0
   End

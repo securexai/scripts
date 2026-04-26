@@ -40,7 +40,16 @@ die()   { error "$*"; exit "${EXIT_GENERIC:-1}"; }
 
 [[ "${TRACE:-0}" == "1" ]] && set -o xtrace
 
-trap 'rc=$?; printf "%serror%s %s:%s: \"%s\" exited %s\n" "${_C_ERR}" "${_C_RESET}" "${BASH_SOURCE[0]}" "${LINENO}" "${BASH_COMMAND}" "${rc}" >&2' ERR
+# Diagnostic ERR trap — only register outside ShellSpec. With errtrace
+# the trap is inherited into every subshell and function; when common.sh
+# is `Include`d into a spec file the trap fires inside ShellSpec's own
+# evaluation frames and pollutes spec output with synthetic
+# 'return $1 exited NN' messages. SHELLSPEC_VERSION is exported by the
+# shellspec runner and inherited by subprocesses it spawns.
+if [[ -z "${SHELLSPEC_VERSION:-}" ]]; then
+  # shellcheck disable=SC2154 # rc is assigned inside the trap body
+  trap 'rc=$?; printf "%serror%s %s:%s: \"%s\" exited %s\n" "${_C_ERR}" "${_C_RESET}" "${BASH_SOURCE[0]}" "${LINENO}" "${BASH_COMMAND}" "${rc}" >&2' ERR
+fi
 
 # Exit-code taxonomy. Values 0/1 are conventional; 64-78 follow sysexits.h.
 # 71-72 are local extensions (sysexits.h has no slot for "network failure"
