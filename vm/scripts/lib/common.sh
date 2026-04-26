@@ -9,11 +9,20 @@
 [[ -n "${_VM_LIB_COMMON_LOADED:-}" ]] && return 0
 readonly _VM_LIB_COMMON_LOADED=1
 
-set -o errexit
-set -o nounset
-set -o pipefail
-set -o errtrace
-shopt -s inherit_errexit
+# Strict-mode preamble — only when not running under ShellSpec. When
+# common.sh is `Include`d into a spec, these options are applied to
+# ShellSpec's own shell and any non-zero subshell exit (e.g. an
+# expected EXIT_USAGE assertion) terminates the executor pipeline,
+# preventing later specs from running. ShellSpec exports
+# SHELLSPEC_VERSION so we can detect both the test harness and any
+# subprocess it spawns. nullglob is harmless either way and stays.
+if [[ -z "${SHELLSPEC_VERSION:-}" ]]; then
+  set -o errexit
+  set -o nounset
+  set -o pipefail
+  set -o errtrace
+  shopt -s inherit_errexit
+fi
 shopt -s nullglob
 
 if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 3) )); then
