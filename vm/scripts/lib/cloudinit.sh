@@ -79,8 +79,8 @@ render_seed() {
   for f in meta-data user-data network-config; do
     [[ -r "${CLOUDINIT_BASE_DIR}/${f}.tmpl" ]] \
       || die_with "${EXIT_GENERIC}" "missing template: ${CLOUDINIT_BASE_DIR}/${f}.tmpl"
-    VM_NAME="${vm_name}" SSH_PUBKEY="${pubkey}" \
-      envsubst '$VM_NAME $SSH_PUBKEY' \
+    VM_NAME="${vm_name}" SSH_PUBKEY="${pubkey}" DEFAULT_USER="${DEFAULT_USER:-fedora}" \
+      envsubst '$VM_NAME $SSH_PUBKEY $DEFAULT_USER' \
       < "${CLOUDINIT_BASE_DIR}/${f}.tmpl" \
       > "${seed_dir}/${f}"
   done

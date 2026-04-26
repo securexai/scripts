@@ -20,14 +20,7 @@
 name = "core"
 groups = ["wheel"]
 
-# bib's customizations.services schema is a single table with `enabled`
-# as a string array — not an array-of-tables. Earlier versions accepted
-# the array-of-tables form; current bib (>= 2025-12) hard-fails with
-# `incompatible types: TOML value has type map[string]any` on it.
-[customizations.services]
-enabled = [
-  "cloud-init.service",
-  "cloud-config.service",
-  "cloud-final.service",
-  "cloud-init-local.service",
-]
+# bib `latest` (2026-04) reports "customizations.services: not supported".
+# cloud-init services are enabled inside the derived OCI image
+# (Containerfile.bootc) via `systemctl enable --now ...` instead, since
+# the bib customizations layer can no longer drive systemd state.

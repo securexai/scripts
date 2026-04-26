@@ -5,6 +5,21 @@
 ssh_pwauth: false
 disable_root: true
 
+# Inject the per-VM key into the named target user (set in
+# vm/targets/<target>.env via DEFAULT_USER) plus the cloud-init default
+# user. This covers two cases: Fedora Cloud, where the default user is
+# fedora and our DEFAULT_USER matches; and bootc-derived images, where
+# the user is created during the bib build (e.g. core) and cloud-init's
+# notion of "default user" differs from the image's actual login user.
+users:
+  - default
+  - name: ${DEFAULT_USER}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [wheel]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${SSH_PUBKEY}
+
 ssh_authorized_keys:
   - ${SSH_PUBKEY}
 

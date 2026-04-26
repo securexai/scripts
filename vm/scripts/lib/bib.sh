@@ -99,12 +99,25 @@ build_kinoite_qcow() {
 
   # shellcheck disable=SC2086  # _PODMAN may contain space-separated tokens
   local _PODMAN; _PODMAN=$(_resolve_podman)
-  log "pulling ${oci_ref}@${oci_digest}"
-  ${_PODMAN} pull "${oci_ref}@${oci_digest}" >/dev/null
+
+  # Local images (oci_ref starts with localhost/) are already in podman's
+  # store — pulling would fail. bib accepts the bare `localhost/<name>:<tag>`
+  # reference (NOT `containers-storage:<...>` — bib's parser rejects that)
+  # and resolves it against the bind-mounted /var/lib/containers/storage.
+  local bib_ref
+  if [[ "${oci_ref}" == localhost/* ]]; then
+    log "using local OCI: ${oci_ref}"
+    bib_ref="${oci_ref}"
+  else
+    log "pulling ${oci_ref}@${oci_digest}"
+    ${_PODMAN} pull "${oci_ref}@${oci_digest}" >/dev/null
+    bib_ref="${oci_ref}@${oci_digest}"
+  fi
 
   # Rootful bib needs the host's container storage mounted so it can
   # resolve the OCI ref we just pulled (ref lives in root's libpod store,
-  # which the bib container otherwise can't see).
+  # which the bib container otherwise can't see). Same mount lets it
+  # resolve `containers-storage:` refs to locally-built derived images.
   local store_mount=()
   if [[ "${BIB_ROOTFUL:-0}" == "1" ]]; then
     store_mount+=(-v /var/lib/containers/storage:/var/lib/containers/storage)
@@ -119,7 +132,7 @@ build_kinoite_qcow() {
     "quay.io/centos-bootc/bootc-image-builder:${bib_version}" \
     --type qcow2 \
     --config /config.toml \
-    "${oci_ref}@${oci_digest}"
+    "${bib_ref}"
 
   # Rootful bib writes /output as uid 0 on the host. Reclaim ownership
   # so libvirt's session URI can read the qcow2 without escalation.
