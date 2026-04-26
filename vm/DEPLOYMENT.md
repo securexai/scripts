@@ -1,22 +1,23 @@
 # vm/ Deployment & Test Status
 
-**Status:** green / smoke green + bootc lane proven — default ShellSpec
-lane runs **24 examples · 0 failures · 0 warnings · 0 errors** in
-307–319 s. Both targets boot UEFI: Fedora 43 Cloud
-(`./scripts/vm create --target fedora-cloud`) and a derived bootc image
-(`./scripts/vm create --target kinoite`, backed by
-`vm/Containerfile.bootc` — `centos-bootc:stream9` + cloud-init).
-SSH-key login confirmed on both. The literal "Kinoite-with-KDE" intent
-remains R-017 (upstream f43 bootc bases lack the `DefaultRootFs`
-metadata bib `latest` requires).
+**Status:** green / smoke green + bootc lane proven + live-VM re-verified —
+default ShellSpec lane runs **24 examples · 0 failures · 0 warnings ·
+0 errors** in 307–319 s, and both disposable VMs are up right now:
+`disposable-fedora` at `192.168.122.216` (Fedora 43 Cloud, kernel
+6.17.1-300.fc43.x86_64) and `disposable-bootc` at `192.168.122.243`
+(CentOS Stream 9 bootc, kernel 5.14.0-691.el9.x86_64). Both boot UEFI
+(`/sys/firmware/efi` present), authenticate with the per-VM ephemeral
+ed25519 key, and pass passwordless sudo. The literal "Kinoite-with-KDE"
+intent remains R-017 (upstream f43 bootc bases lack the
+`DefaultRootFs` metadata bib `latest` requires).
 
 **Last verified:** 2026-04-26
 
 **Owner:** [@securexai](https://github.com/securexai)
 
-**Doc version:** 1.5
+**Doc version:** 1.6
 
-**Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD `8af294f`)
+**Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD `3c56e60`)
 
 ---
 
@@ -287,6 +288,13 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
+- **2026-04-26** — `feat/vm-hardening-e2e-deploy-doc` (post-`3c56e60` re-verification):
+  live-VM smoke against both lanes from a clean shell. `virsh -c qemu:///session list --all`
+  shows `disposable-fedora` and `disposable-bootc` both `running`; `vm ssh` into each returns
+  expected `os-release` (Fedora 43 Cloud / CentOS Stream 9), kernel (6.17.1-300.fc43 /
+  5.14.0-691.el9), wheel-group user (`fedora` / `core`), and `/sys/firmware/efi` present.
+  No code or test changes — confirms the v1.5 state holds across reboots and reseeded keys.
+  Doc bumped to v1.6 to stamp the checkpoint.
 - **2026-04-26** — `feat/vm-hardening-e2e-deploy-doc` `8af294f`: bootc lane works end-to-end
   via a derived OCI. New `vm/Containerfile.bootc` layers cloud-init + systemd enables on
   `centos-bootc:stream9`; `bib.sh` learns to consume `localhost/...` refs (skip pull, pass
