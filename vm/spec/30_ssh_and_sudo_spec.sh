@@ -23,27 +23,15 @@ Describe 'ssh + sudo'
     The output should equal '0'
   End
 
-  It 'password auth is refused (PubkeyAuthentication=no)'
-    # Probe the VM IP directly with options that force password auth.
-    # Should fail closed (BatchMode + no password method available).
-    # Walk agent → lease → arp like get_ipv4 does — bridge-mode session
-    # libvirt has no lease table.
-    ip=''
-    for src in agent lease arp; do
-      ip=$(virsh -c "${LIBVIRT_DEFAULT_URI}" domifaddr "${VM_NAME}" --source "$src" 2>/dev/null \
-           | awk '$3=="ipv4" && $1!="lo" {split($4,a,"/");print a[1];exit}')
-      [[ -n "$ip" ]] && break
-    done
-    When run command ssh \
-      -o BatchMode=yes \
-      -o StrictHostKeyChecking=accept-new \
-      -o UserKnownHostsFile=/dev/null \
-      -o PubkeyAuthentication=no \
-      -o PreferredAuthentications=password \
-      -o ConnectTimeout=5 \
-      "fedora@${ip}" true
-    The status should not equal 0
-    The stderr should be defined
+  It 'password auth is refused (effective sshd config)'
+    # Inspect the live sshd effective config inside the guest. This is
+    # the actual security property — a previous client-side ssh probe
+    # passed tautologically because BatchMode forbids the client from
+    # ever supplying a password, so the connection failed regardless of
+    # what the server allowed.
+    When run script "${VM_BIN}" ssh "${VM_NAME}" -- 'sudo -n sshd -T 2>/dev/null | awk "/^passwordauthentication / {print \$2}"'
+    The status should equal 0
+    The output should equal 'no'
   End
 
   It 'per-VM key (B1) is the active identity'

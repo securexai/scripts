@@ -51,14 +51,21 @@ _resolve_vm_pubkey() {
 # Append a cloud-init overlay fragment to the user-data, keeping the
 # rendered base intact. Overlays live at vm/cloudinit/overlays/<name>.yaml.tmpl
 # and may use the same envsubst variables as the base.
+#
+# Lifecycle caveat: this is a textual append, not a YAML merge. If both
+# the base and the overlay declare the same top-level mapping key (e.g.
+# `runcmd:`, `users:`, `packages:`), cloud-init's PyYAML loader picks
+# the last occurrence and the earlier value is silently dropped. Keep
+# top-level keys disjoint between base and overlay.
+#
 # Args: <vm_name> <seed_dir> <overlay_name> <pubkey>
 _apply_overlay() {
   local vm_name="$1" seed_dir="$2" overlay="$3" pubkey="$4"
   local tmpl="${CLOUDINIT_OVERLAYS_DIR}/${overlay}.yaml.tmpl"
   [[ -r "${tmpl}" ]] || die_with "${EXIT_USAGE}" "overlay template not found: ${tmpl}"
   log "applying cloud-init overlay: ${overlay}"
-  VM_NAME="${vm_name}" SSH_PUBKEY="${pubkey}" \
-    envsubst '$VM_NAME $SSH_PUBKEY' \
+  VM_NAME="${vm_name}" SSH_PUBKEY="${pubkey}" DEFAULT_USER="${DEFAULT_USER:-fedora}" \
+    envsubst '$VM_NAME $SSH_PUBKEY $DEFAULT_USER' \
     < "${tmpl}" \
     >> "${seed_dir}/user-data"
 }
@@ -71,16 +78,18 @@ render_seed() {
   local seed_dir="${SEED_DIR}/${vm_name}"
   mkdir -p "${seed_dir}"
 
-  local pubkey_path pubkey
+  local pubkey_path pubkey build_date
   pubkey_path=$(_resolve_vm_pubkey "${vm_name}" "${seed_dir}")
   pubkey=$(< "${pubkey_path}")
+  build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
   local f
   for f in meta-data user-data network-config; do
     [[ -r "${CLOUDINIT_BASE_DIR}/${f}.tmpl" ]] \
       || die_with "${EXIT_GENERIC}" "missing template: ${CLOUDINIT_BASE_DIR}/${f}.tmpl"
     VM_NAME="${vm_name}" SSH_PUBKEY="${pubkey}" DEFAULT_USER="${DEFAULT_USER:-fedora}" \
-      envsubst '$VM_NAME $SSH_PUBKEY $DEFAULT_USER' \
+      BUILD_DATE="${build_date}" \
+      envsubst '$VM_NAME $SSH_PUBKEY $DEFAULT_USER $BUILD_DATE' \
       < "${CLOUDINIT_BASE_DIR}/${f}.tmpl" \
       > "${seed_dir}/${f}"
   done

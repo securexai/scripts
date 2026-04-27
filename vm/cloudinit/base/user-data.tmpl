@@ -28,7 +28,13 @@ ssh_authorized_keys:
 package_update: false
 package_upgrade: false
 
-runcmd:
-  - [ "sh", "-c", "printf 'provisioned by scripts/vm/ on %s\\n' \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > /etc/motd" ]
+# Use write_files (not runcmd) — see _apply_overlay in cloudinit.sh
+# for why duplicate top-level keys at this layer are unsafe.
+write_files:
+  - path: /etc/motd
+    owner: root:root
+    permissions: '0644'
+    content: |
+      provisioned by scripts/vm/ on ${BUILD_DATE}
 
 final_message: "scripts/vm seed applied; uptime $UPTIME, datasource $DSNAME"
