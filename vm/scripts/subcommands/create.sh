@@ -16,6 +16,8 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/../lib/cloudinit.sh"
 # shellcheck source=../lib/libvirt.sh
 . "${SCRIPT_DIR}/../lib/libvirt.sh"
+# shellcheck source=../lib/locks.sh
+. "${SCRIPT_DIR}/../lib/locks.sh"
 
 readonly _CREATE_VM_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly TARGETS_DIR="${_CREATE_VM_ROOT}/targets"
@@ -61,15 +63,6 @@ done
 [[ -n "${target}" ]] || { usage; die_with "${EXIT_USAGE}" "--target required"; }
 [[ -n "${name}"   ]] || { usage; die_with "${EXIT_USAGE}" "--name required"; }
 
-# Acquire an advisory lock on this VM name so two concurrent
-# create/destroy invocations can't race on the seed dir or overlay disk.
-# Lock is released automatically when this script exits.
-require_cmd flock
-readonly LOCK_PATH="${SEED_DIR}/${name}.lock"
-exec {LOCK_FD}>"${LOCK_PATH}"
-flock -n "${LOCK_FD}" \
-  || die_with "${EXIT_LIBVIRT}" "another vm operation is in progress for '${name}' (lock: ${LOCK_PATH})"
-
 # --overlay and --with-cockpit are mutually exclusive (a single overlay
 # is appended; combining would require a multi-overlay merge we don't
 # implement yet). Surface the conflict instead of silently dropping one.
@@ -87,7 +80,11 @@ if (( with_cockpit )) && [[ "${target}" == "fedora-cloud" ]]; then
 fi
 
 target_env="${TARGETS_DIR}/${target}.env"
-[[ -r "${target_env}" ]] || die "target not found: ${target_env}"
+[[ -r "${target_env}" ]] || die_with "${EXIT_USAGE}" "target not found: ${target_env}"
+
+# Acquired after usage validation so a typo in --target doesn't leave
+# an orphan lockfile that destroy.sh would never come back to clean.
+vm_lock_acquire "${name}"
 
 # shellcheck disable=SC1090
 . "${target_env}"
@@ -115,7 +112,7 @@ esac
 
 # Refuse to clobber an existing domain of the same name.
 if virsh -c "${LIBVIRT_URI}" dominfo "${name}" >/dev/null 2>&1; then
-  die "VM '${name}' already exists — 'vm destroy ${name}' first"
+  die_with "${EXIT_USAGE}" "VM '${name}' already exists — 'vm destroy ${name}' first"
 fi
 
 require_cmd qemu-img
