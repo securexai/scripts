@@ -65,6 +65,16 @@ build_kinoite_qcow() {
   [[ -n "${oci_ref}" && -n "${oci_digest}" && -n "${bib_version}" && -n "${bib_config_rel}" ]] \
     || die_with "${EXIT_USAGE}" "kinoite env missing required vars (OCI_REF/OCI_DIGEST/BIB_VERSION/BIB_CONFIG_REL)"
 
+  # bib rejects skopeo-style transport prefixes and the localhost/*
+  # branch below only triggers on a bare ref. Catch the most common
+  # mistake — a copy-pasted `containers-storage:` ref from
+  # Containerfile.bootc — up front instead of letting it fall through
+  # to a confusing `podman pull` failure.
+  case "${oci_ref}" in
+    containers-storage:*|oci:*|oci-archive:*|dir:*|docker-daemon:*|tarball:*)
+      die_with "${EXIT_USAGE}" "OCI_REF must not include a transport prefix (got: ${oci_ref}) — use a bare 'localhost/<name>:<tag>' or 'registry/<name>:<tag>' form" ;;
+  esac
+
   # Override config (e.g. kinoite-cockpit.toml) keeps a separate output
   # cache so a base build and a cockpit build don't clobber each other.
   local effective_config_rel="${config_override:-${bib_config_rel}}"

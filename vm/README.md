@@ -134,6 +134,7 @@ Honored everywhere:
 | `VM_PREFLIGHT`          | `fast`                           | dispatcher preflight mode: `fast` (env-only), `full`, `none`                    |
 | `VM_EXPECTED_FEDORA`    | `43`                             | expected `VERSION_ID` for the OS-ID check                                       |
 | `VM_E2E_KINOITE`        | unset                            | opt-in: run the kinoite ShellSpec lane (10–25 min)                              |
+| `VM_E2E_COCKPIT`        | unset                            | opt-in: run the cockpit ShellSpec lane (~150 MB extra packages)                 |
 
 ## Smoke test
 

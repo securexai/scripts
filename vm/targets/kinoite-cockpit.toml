@@ -7,8 +7,8 @@
 #
 # Diff vs kinoite.toml:
 #   - adds cockpit, cockpit-system, cockpit-machines to the layered set
-#   - enables cockpit.socket so the admin UI is reachable on :9090 on
-#     first boot, no extra runcmd needed
+#     so the admin UI binaries are present in the qcow2; cockpit.socket
+#     enabling has to happen post-boot (see services-block note below)
 #
 # IMPORTANT: cloud-init must still be present in the OCI base (or
 # layered separately — see kinoite.toml notes) for the per-VM seed ISO
@@ -21,14 +21,12 @@ packages = ["cockpit", "cockpit-system", "cockpit-machines"]
 name = "core"
 groups = ["wheel"]
 
-# bib's customizations.services schema is a single table with `enabled`
-# as a string array. customizations.packages likewise expects a list of
-# package names, not an array-of-tables.
-[customizations.services]
-enabled = [
-  "cloud-init.service",
-  "cloud-config.service",
-  "cloud-final.service",
-  "cloud-init-local.service",
-  "cockpit.socket",
-]
+# bib `latest` (2026-04) reports "customizations.services: not supported"
+# (same diagnosis as kinoite.toml — the schema is gone, not just the
+# array-of-tables form). cloud-init services are enabled inside the
+# derived OCI image (Containerfile.bootc); cockpit.socket has no
+# equivalent enable hook today, so the user must run
+#   vm ssh <name> -- sudo systemctl enable --now cockpit.socket
+# on first boot, or layer cockpit into a derived Containerfile alongside
+# cloud-init. Tracked under R-017 (kinoite lane is upstream-blocked
+# anyway pending bib DefaultRootFs alignment).

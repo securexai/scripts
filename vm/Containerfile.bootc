@@ -13,11 +13,17 @@
 # Get the digest:
 #   sudo podman inspect --format '{{.Digest}}' localhost/scripts-vm-bootc:latest
 #
-# Repoint vm/targets/kinoite.env:
-#   OCI_REF="containers-storage:localhost/scripts-vm-bootc:latest"
+# Repoint vm/targets/kinoite.env (bare localhost ref — bib's parser
+# rejects `containers-storage:<...>` and the prefix match in bib.sh
+# only matches `localhost/*`, so anything else falls through to a
+# `podman pull` that doesn't accept the transport-prefixed form):
+#   OCI_REF="localhost/scripts-vm-bootc:latest"
 #   OCI_DIGEST=<digest from above>
 
-FROM quay.io/centos-bootc/centos-bootc:stream9
+# Base pinned by digest so a moved upstream `stream9` tag can't silently
+# change layer content under us. Re-pin via `skopeo inspect` when a
+# refresh is intentional.
+FROM quay.io/centos-bootc/centos-bootc:stream9@sha256:2b91cbde73cd6c43ff2eacde9ef9ef760ef35cfea48a7ce9eecd74814b51a083
 
 RUN dnf -y install cloud-init && \
     dnf clean all && \
