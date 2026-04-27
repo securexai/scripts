@@ -13,6 +13,7 @@
 #   get_ipv4    <name>           — print first IPv4 from libvirt's lease/ARP
 #   wait_for_ssh <name> [<timeout-seconds>]  — block until SSH is reachable
 #   ssh_to      <name> [args…]   — exec ssh with the standard option set
+#   vm_list_defined_domains      — print one domain name per line
 
 [[ -n "${_VM_LIB_LIBVIRT_LOADED:-}" ]] && return 0
 readonly _VM_LIB_LIBVIRT_LOADED=1
@@ -20,6 +21,12 @@ readonly _VM_LIB_LIBVIRT_LOADED=1
 require_cmd virsh
 require_cmd virt-install
 require_cmd ssh
+
+# `virsh list --all --name` emits one name per line plus a trailing blank;
+# the awk filter drops empty lines so callers get a clean array.
+vm_list_defined_domains() {
+  virsh -c "${LIBVIRT_URI}" list --all --name 2>/dev/null | awk 'NF'
+}
 
 vm_define() {
   local name="$1" disk="$2" seed="$3" os_variant="$4" vcpus="$5" mem_mib="$6"

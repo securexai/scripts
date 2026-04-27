@@ -90,6 +90,7 @@ vm snapshot <name> <snap>
 vm reset    <name> <snap>      revert to snapshot
 vm list                        tidy table from virsh list --all
 vm status   <name>             state, IP, snapshots, disk path
+vm prune    [--apply]          remove orphan disks/seeds/locks (dry-run default)
 vm build-kinoite               run the bib pipeline (slow, opt-in)
 ```
 

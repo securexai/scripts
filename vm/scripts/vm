@@ -23,6 +23,7 @@ usage: vm <subcommand> [args...]
   reset    <name> <snap>         revert to snapshot
   list                           tidy virsh list --all
   status   <name>                state, IP, snapshots, disk path
+  prune    [--apply] [--quiet]   remove orphan disks/seeds/locks (dry-run default)
   build-kinoite                  build the Kinoite qcow2 via bib (slow)
 
 Env overrides honored everywhere:
