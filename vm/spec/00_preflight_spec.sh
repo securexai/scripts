@@ -17,7 +17,12 @@ Describe 'preflight'
     It 'rejects a wrong VERSION_ID'
       When call preflight_check_os_id 999
       The status should be failure
-      The stderr should include "expected '999'"
+      The stderr should include "expected one of: 999"
+    End
+
+    It 'accepts a whitespace-separated allowlist (R-019 straddle)'
+      When call preflight_check_os_id "${VM_EXPECTED_FEDORA:-43} 999"
+      The status should be success
     End
   End
 

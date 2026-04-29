@@ -1,23 +1,26 @@
 # vm/ Deployment & Test Status
 
 **Status:** green / smoke green + bootc lane proven + live-VM re-verified —
-default ShellSpec lane runs **24 examples · 0 failures · 0 warnings ·
-0 errors** in 307–319 s, and both disposable VMs are up right now:
+default ShellSpec lane runs **27 examples · 0 failures** in ~370 s, and
+both disposable VMs are up right now:
 `disposable-fedora` at `192.168.122.216` (Fedora 43 Cloud, kernel
 6.17.1-300.fc43.x86_64) and `disposable-bootc` at `192.168.122.243`
 (CentOS Stream 9 bootc, kernel 5.14.0-691.el9.x86_64). Both boot UEFI
 (`/sys/firmware/efi` present), authenticate with the per-VM ephemeral
-ed25519 key, and pass passwordless sudo. The literal "Kinoite-with-KDE"
-intent remains R-017 (upstream f43 bootc bases lack the
-`DefaultRootFs` metadata bib `latest` requires).
+ed25519 key, and pass passwordless sudo. R-017 is now reframed: the
+"missing `DefaultRootFs`" is upstream Fedora bootc policy (intentional,
+not a bug); the supported fix is bib's `--rootfs` CLI flag, plumbed
+through `lib/bib.sh` via `BIB_ROOTFS`. The derived-OCI workaround in
+`Containerfile.bootc` remains valid as an alternative. R-019 tracks
+the pending Fedora 44 host bump (F44 went GA 2026-04-28).
 
 **Last verified:** 2026-04-26
 
 **Owner:** [@securexai](https://github.com/securexai)
 
-**Doc version:** 1.6
+**Doc version:** 1.7
 
-**Subsystem SHA:** `feat/vm-hardening-e2e-deploy-doc` (branch HEAD `3c56e60`)
+**Subsystem SHA:** `main` (HEAD `de0cd05`) — PRs #1 + #2 merged 2026-04-29
 
 ---
 
@@ -32,9 +35,11 @@ intent remains R-017 (upstream f43 bootc bases lack the
 - End-to-end exercise on a real Fedora 43 + Kinoite host surfaced four bugs fixed in
   `2e1c338`, `8e22366`, `08f5405`, `49ecc0a` (`edc201f` for ShellSpec output config). VMs
   now boot, network out via the system bridge, and authenticate over SSH using per-VM keys.
-- The default ShellSpec lane runs via `./tests/smoke.sh` and is **green**: 24 examples,
-  0 failures, 0 warnings, 0 errors. Cockpit and kinoite specs are opt-in
-  (`VM_E2E_COCKPIT=1`, `VM_E2E_KINOITE=1`) so heavy installs stay out of the default lane.
+- The default ShellSpec lane runs via `./tests/smoke.sh` and is **green**: 27 examples,
+  0 failures (specs 00 → 40 — R-016 prevents specs 60+ from running in the default lane).
+  Cockpit and kinoite specs are opt-in (`VM_E2E_COCKPIT=1`, `VM_E2E_KINOITE=1`); residue,
+  prune, idempotency, and parallel-safety specs (60/65/70/80) are exercised standalone
+  (see Verification Runbook).
 - All VMs boot UEFI (OVMF firmware via `--boot firmware=efi`); per-VM NVRAM lives in
   `~/.config/libvirt/qemu/nvram/<name>_VARS.qcow2` and is cleaned up by `vm destroy`.
 - The bootc lane is now proven end-to-end via a derived OCI: build with
@@ -48,14 +53,9 @@ intent remains R-017 (upstream f43 bootc bases lack the
 
 ## Scope
 
-This document covers the `vm/` subsystem of the `scripts` repo. It does not cover the untracked
-`bash/` directory, the deleted `skill-forced-eval-hook.sh`, or the broader repo. Everything
-referenced here lives under `vm/`.
-
-Repo-wide enforcement (pre-commit hooks, betterleaks secret scanning, commitlint, markdownlint,
-shellcheck/shfmt baseline) ships from sibling branches `chore/bootstrap-pre-commit-baseline` and
-`chore/lint-cleanup-shellcheck`. See the root [`CHANGELOG.md`](../CHANGELOG.md) and
-[`README.md`](../README.md) for repo-level scope.
+This document covers the `vm/` subsystem of the `scripts` repo. The repo-root `bash/`
+directory (one-off hook scripts) and `.toolbox/` (dev-environment Containerfile +
+setup) are out of scope here. Repo-wide context lives in [`../CLAUDE.md`](../CLAUDE.md).
 
 ## Host Prerequisites
 
@@ -156,21 +156,22 @@ Status legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked
 ShellSpec specs under [`spec/`](spec/), run via [`tests/smoke.sh`](tests/smoke.sh). TAP/JUnit
 formatters available; default is documentation format.
 
-Smoke run `ba14imuzv` 2026-04-26 (310.5 s). 24 examples, 0 failures, 0 warnings, 0 errors.
+Smoke run 2026-04-29 (368.5 s). 27 examples, 0 failures.
 Wrapper exits 0 with `[smoke] shellspec aborted with 0 failures — treating as success.`
 on the cosmetic ShellSpec abort flag (R-015).
 
 | Spec                                                                                | Target           | Mechanism    | Status        | Last run         | Evidence                                                                     |
 | ----------------------------------------------------------------------------------- | ---------------- | ------------ | ------------- | ---------------- | ---------------------------------------------------------------------------- |
-| [`00_preflight_spec.sh`](spec/00_preflight_spec.sh)                                  | host             | unit + e2e   | `[x]` 8 PASS  | 2026-04-26       | OS-id check, `/dev/kvm`, binaries, `virsh` reachability, dispatcher help/usage. |
-| [`10_create_fedora_cloud_spec.sh`](spec/10_create_fedora_cloud_spec.sh)              | fedora-cloud     | e2e          | `[x]` 5 PASS  | 2026-04-26       | Domain, overlay, seed dir, metadata sidecar, ed25519 keypair all materialize. |
-| [`20_cloud_init_and_net_spec.sh`](spec/20_cloud_init_and_net_spec.sh)                | fedora-cloud     | e2e          | `[x]` 3 PASS  | 2026-04-26       | `cloud-init status --wait` clean, `fedoraproject.org` reachable, `quay.io` resolves. |
-| [`30_ssh_and_sudo_spec.sh`](spec/30_ssh_and_sudo_spec.sh)                            | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-26       | Per-VM key auth + passwordless sudo + password-auth refused + key-active.    |
-| [`40_snapshot_reset_spec.sh`](spec/40_snapshot_reset_spec.sh)                        | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-26       | Snapshot create, drift install, reset reverts, snapshot still present.       |
+| [`00_preflight_spec.sh`](spec/00_preflight_spec.sh)                                  | host             | unit + e2e   | `[x]` 9 PASS  | 2026-04-29       | OS-id check (incl. allowlist), `/dev/kvm`, binaries, `virsh` reachability, dispatcher help/usage. |
+| [`10_create_fedora_cloud_spec.sh`](spec/10_create_fedora_cloud_spec.sh)              | fedora-cloud     | e2e          | `[x]` 7 PASS  | 2026-04-29       | Domain, overlay, seed dir, metadata sidecar, ed25519 keypair, UEFI host XML + guest. |
+| [`20_cloud_init_and_net_spec.sh`](spec/20_cloud_init_and_net_spec.sh)                | fedora-cloud     | e2e          | `[x]` 3 PASS  | 2026-04-29       | `cloud-init status --wait` clean, `fedoraproject.org` reachable, `quay.io` resolves. |
+| [`30_ssh_and_sudo_spec.sh`](spec/30_ssh_and_sudo_spec.sh)                            | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-29       | Per-VM key auth + passwordless sudo + sshd-effective `passwordauthentication=no` + key-active. |
+| [`40_snapshot_reset_spec.sh`](spec/40_snapshot_reset_spec.sh)                        | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-29       | Snapshot create, drift install, reset reverts, snapshot still present.       |
 | [`50_cockpit_spec.sh`](spec/50_cockpit_spec.sh)                                      | fedora-cloud × 2 | e2e (opt-in) | `[ ]` skipped | (n/a)            | `VM_E2E_COCKPIT=1` — not exercised in default lane.                          |
-| [`60_destroy_residue_spec.sh`](spec/60_destroy_residue_spec.sh) *                    | fedora-cloud     | e2e          | `[~]` 7 PASS  | 2026-04-26 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
-| [`70_idempotency_spec.sh`](spec/70_idempotency_spec.sh) *                            | fedora-cloud     | e2e          | `[~]` 5 PASS  | 2026-04-26 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
-| [`80_parallel_safety_spec.sh`](spec/80_parallel_safety_spec.sh) *                    | host (lock)      | unit         | `[~]` 2 PASS  | 2026-04-26 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
+| [`60_destroy_residue_spec.sh`](spec/60_destroy_residue_spec.sh) *                    | fedora-cloud     | e2e          | `[~]` 7 PASS  | 2026-04-29 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
+| [`65_prune_spec.sh`](spec/65_prune_spec.sh) *                                        | host (synthetic) | unit         | `[~]` 5 PASS  | 2026-04-29 (iso) | Dry-run, --apply, idempotency, held-lock skip, EXIT_USAGE on bogus arg.      |
+| [`70_idempotency_spec.sh`](spec/70_idempotency_spec.sh) *                            | fedora-cloud     | e2e          | `[~]` 6 PASS  | 2026-04-29 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
+| [`80_parallel_safety_spec.sh`](spec/80_parallel_safety_spec.sh) *                    | host (lock)      | unit         | `[~]` 2 PASS  | 2026-04-29 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
 | [`90_kinoite_spec.sh`](spec/90_kinoite_spec.sh)                                      | kinoite          | e2e (opt-in) | `[ ]` skipped | (n/a)            | `VM_E2E_KINOITE=1` — not exercised in default lane.                          |
 
 \* In the full lane, ShellSpec stops emitting examples after spec 40 even though every spec runs cleanly when invoked directly. The wrapper's success-on-cosmetic-abort logic keeps the lane green; standalone invocation (`shellspec spec/60_destroy_residue_spec.sh`) confirms 60/70/80 all pass. Tracked as R-016.
@@ -211,10 +212,10 @@ Means Phase 2 is complete.
 ./vm/tests/smoke.sh
 ```
 
-Expected: `24 examples, 0 failures, aborted by an unexpected error` followed by
+Expected: `27 examples, 0 failures, aborted by an unexpected error` followed by
 `[smoke] shellspec aborted with 0 failures — treating as success.` and exit 0.
 Wall clock 5–6 min on a warm cache. Means Phases 3 + 4 are green; the `[~]` rows in the Test
-Matrix (specs 60/70/80) are validated separately (see Idempotency / parallel-safety lane).
+Matrix (specs 60/65/70/80) are validated separately (see Idempotency / parallel-safety lane).
 
 ### Cockpit lane (opt-in)
 
@@ -228,10 +229,11 @@ Expected: two parallel fedora-cloud VMs (with + without `--with-cockpit`) verify
 ### Idempotency / parallel-safety / residue lane (standalone)
 
 ```bash
-shellspec spec/60_destroy_residue_spec.sh spec/70_idempotency_spec.sh spec/80_parallel_safety_spec.sh
+shellspec spec/60_destroy_residue_spec.sh spec/65_prune_spec.sh \
+          spec/70_idempotency_spec.sh spec/80_parallel_safety_spec.sh
 ```
 
-Expected: 14 examples, 0 failures. These pass in isolation; the full default lane currently
+Expected: 20 examples, 0 failures. These pass in isolation; the full default lane currently
 stops emitting after spec 40 (R-016) but the wrapper still exits 0 on the cosmetic abort.
 
 ### Kinoite lane
@@ -272,11 +274,17 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 | R-014 | low      | tests         | `40_snapshot_reset_spec.sh` line 23 had two `When run script` blocks in one `It`, which ShellSpec rejects with "Evaluation has already been executed." | Split into two `It` blocks (`bc27040`).                                                                                              | `[x]`  |
 | R-015 | low      | tests         | ShellSpec reporter clings to `aborted=1` flag at end-of-suite even when every example passed; `executor: 0`, `error handler: 0`, `reporter: 1`. Cosmetic only. | `tests/smoke.sh` wraps the run, suspends errexit, and treats "0 failures, 0 errors, aborted by an unexpected error" as exit 0 (`deb3bef`). | `[x]`  |
 | R-016 | low      | tests         | In the full lane, ShellSpec stops reporting examples after `40_snapshot_reset_spec.sh` even though specs 60/70/80 each pass in isolation. Suspect: stderr leak from one spec's evaluation poisons the executor's marker stream for the rest of the run. | Workaround: opt-in specs gated, R-015 wrapper accepts the abort. Real fix is upstream-shellspec instrumentation; defer until specs 60/70/80 stop passing in isolation. | `[~]`  |
-| R-017 | medium   | supply chain  | bib `latest` reports `missing required info: DefaultRootFs` against **both** `quay.io/fedora-ostree-desktops/kinoite:43` AND `quay.io/fedora/fedora-bootc:43`. bib's tip metadata schema is ahead of what the f43 bootc base images ship, and bib publishes only commit-SHA tags (no semver) so version-pinning to a known-good era is hand-spelunking. The `BIB_ROOTFUL=1` opt-in (R-018) and TOML schema fixes (`6b43b86`) get the bib container running, but the build still hard-fails at manifest generation. | Three paths once upstream alignment lands: (a) pin `BIB_VERSION` to a commit SHA that predates the metadata-schema bump; (b) wait for the f43 bootc images to ship `DefaultRootFs`; (c) derive a `Containerfile.kinoite` from `centos-bootc:stream9` (which does have the metadata) for testing only. Defer; the kinoite lane stays opt-in (`VM_E2E_KINOITE=1`) and isn't blocking the default lane. | `[ ]`  |
+| R-017 | medium   | supply chain  | bib `latest` reports `missing required info: DefaultRootFs` against `quay.io/fedora-ostree-desktops/kinoite:43` and `quay.io/fedora/fedora-bootc:43`. **Reframed 2026-04-29:** this is upstream Fedora bootc policy (per upstream docs: "Some images (like fedora) do not have a default root filesystem type. In this case, you need to add the switch `--rootfs <type>`"). Same policy holds for f44 bases, so this isn't a "wait for upstream" item. | `lib/bib.sh` plumbs a `--rootfs ${BIB_ROOTFS}` flag conditional on the env var being set; targets that need it (kinoite-on-fedora-bootc) export `BIB_ROOTFS="btrfs"` in their env file. The derived-OCI workaround on `centos-bootc:stream9` (which carries `DefaultRootFs`) in `Containerfile.bootc` remains valid as the alternative. | `[~]`  |
 | R-018 | low      | bib           | Rootless bib fails with "Failed to remount /: Permission denied" because rootless `--privileged` doesn't grant CAP_SYS_ADMIN over the parent namespace's mounts. | `BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite` opt-in lands in `6b43b86`; uses `sudo podman` and bind-mounts `/var/lib/containers/storage`. Requires passwordless sudo. | `[x]`  |
+| R-019 | low      | host drift    | Repo is Fedora-43-pinned: `preflight_check_os_id` accepts a single value (`VM_EXPECTED_FEDORA=43`); `targets/*.env` pin F43 image URLs / digests / `OS_VARIANT="fedora43"`; prose mentions "Fedora 43" across `README.md`, `CLAUDE.md`, `setup.sh`. Fedora 44 went GA 2026-04-28 (`kinoite:44` and `fedora-bootc:44` quay tags pushed 2026-04-29). | Two F43-safe prep changes land in this PR: (a) `preflight_check_os_id` accepts a whitespace-separated allowlist so `VM_EXPECTED_FEDORA="43 44"` works; (b) `lib/bib.sh` plumbs `--rootfs` flag (R-017 fix). Image re-pins (`IMAGE_URL`/`IMAGE_SHA256` to F44 CHECKSUM, `OCI_DIGEST` for `kinoite:44`, `OS_VARIANT="fedora44"`) deferred until smoke runs green on a real F44 host. Compat inventory for libvirt/qemu (12.0.0 / 10.2.2 on F44 — minor bump, no breaking changes), cloud-init (25.3 / 26.x — stable surfaces), `rpm-ostree` (still operational on F44; bootc-by-default deferred to F45) recorded under "Change Log 2026-04-29". | `[ ]`  |
 
 ## What's Next
 
+- **F44 host bump (R-019).** Two F43-safe prep changes land in this PR (preflight allowlist
+  + `bib.sh --rootfs` plumbing). When a real F44 host is available, run the standard smoke
+  lane, then re-pin `IMAGE_SHA256` from the F44 CHECKSUM, `OCI_DIGEST` for `kinoite:44`,
+  and bump `OS_VARIANT` to `fedora44`. Verify the toolbx socket bridge
+  (`/run/user/$UID/libvirt/virtqemud-sock`) behaves identically.
 - Promote the kinoite spec to the default lane once `OCI_DIGEST` + `BIB_VERSION` are pinned and a
   warm cache makes wall-clock acceptable.
 - Land Tier C1 (GPG-verify Fedora `CHECKSUM` before SHA256). Self-contained; no upstream
@@ -288,6 +296,22 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
+- **2026-04-29** — `main` (post-merge tracking entry, no live re-verification):
+  PRs #1 + #2 squash-merged; the vm/ subsystem is now on `main`. Additions
+  layered on top of the original PR #1: `vm prune` subcommand + `lib/locks.sh`
+  flock helper extraction (`bc7364e` / `3935383`), cloud-init seed via
+  `write_files` + sshd-effective `passwordauthentication` probe (`41ad11a`),
+  bootc digest pin + bib transport-prefix guard + kinoite-cockpit schema
+  cleanup (`10b284c`), repo `CLAUDE.md` (`de0cd05`). **F44 research**
+  (2026-04-29, post-F44 GA 2026-04-28): bash 5.3.9 / libvirt 12.0.0 /
+  qemu-kvm 10.2.2 / cloud-init 25.3 on F44 base — no breaking changes
+  surfaced for `--boot firmware=efi`, `qemu:///session`, modular daemons,
+  or cloud-init `runcmd`/`write_files`/`users` contracts. R-017 reframed as
+  upstream policy (Fedora bootc images intentionally lack `DefaultRootFs`)
+  with `--rootfs` flag as the supported fix; R-019 opened to track the
+  pending F44 image re-pins. Two F43-safe prep changes land alongside this
+  doc bump: `preflight_check_os_id` accepts an allowlist; `lib/bib.sh`
+  plumbs `--rootfs ${BIB_ROOTFS}`. Doc bumped to v1.7.
 - **2026-04-26** — `feat/vm-hardening-e2e-deploy-doc` (post-`3c56e60` re-verification):
   live-VM smoke against both lanes from a clean shell. `virsh -c qemu:///session list --all`
   shows `disposable-fedora` and `disposable-bootc` both `running`; `vm ssh` into each returns
@@ -370,9 +394,7 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Cross-References
 
-- Repo-wide tracker: [`../STATUS.md`](../STATUS.md) (forward-looking branch queue + verification chain)
-- Repo-wide history: [`../CHANGELOG.md`](../CHANGELOG.md)
-- Repo-wide overview: [`../README.md`](../README.md)
+- Repo-wide context: [`../CLAUDE.md`](../CLAUDE.md)
 - Subsystem README: [`README.md`](README.md)
 - Setup script: [`setup.sh`](setup.sh)
 - Dispatcher: [`scripts/vm`](scripts/vm)

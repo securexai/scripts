@@ -133,6 +133,17 @@ build_kinoite_qcow() {
     store_mount+=(-v /var/lib/containers/storage:/var/lib/containers/storage)
   fi
 
+  # Fedora bootc images (kinoite, fedora-bootc) intentionally don't
+  # declare a default root filesystem — bib hard-fails with
+  # "missing required info: DefaultRootFs" unless a --rootfs flag is
+  # supplied. centos-bootc:stream9 (the derived-OCI workaround base)
+  # does carry the metadata so this stays unset for it. Documented
+  # under R-017 in vm/DEPLOYMENT.md.
+  local rootfs_flag=()
+  if [[ -n "${BIB_ROOTFS:-}" ]]; then
+    rootfs_flag+=(--rootfs "${BIB_ROOTFS}")
+  fi
+
   log "running bootc-image-builder ${bib_version}"
   # shellcheck disable=SC2086
   ${_PODMAN} run --rm --privileged --security-opt label=disable \
@@ -142,6 +153,7 @@ build_kinoite_qcow() {
     "quay.io/centos-bootc/bootc-image-builder:${bib_version}" \
     --type qcow2 \
     --config /config.toml \
+    "${rootfs_flag[@]}" \
     "${bib_ref}"
 
   # Rootful bib writes /output as uid 0 on the host. Reclaim ownership

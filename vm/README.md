@@ -132,17 +132,22 @@ Honored everywhere:
 | `NO_COLOR=1`            | unset                            | suppress ANSI colors in log/warn/error                                          |
 | `USE_LIBVIRT_GROUP=1`   | unset (only consumed by setup.sh)| add user to `libvirt` group for `qemu:///system`                                |
 | `VM_PREFLIGHT`          | `fast`                           | dispatcher preflight mode: `fast` (env-only), `full`, `none`                    |
-| `VM_EXPECTED_FEDORA`    | `43`                             | expected `VERSION_ID` for the OS-ID check                                       |
+| `VM_EXPECTED_FEDORA`    | `43`                             | expected `VERSION_ID` allowlist (whitespace-separated; e.g. `"43 44"`)          |
 | `VM_E2E_KINOITE`        | unset                            | opt-in: run the kinoite ShellSpec lane (10–25 min)                              |
 | `VM_E2E_COCKPIT`        | unset                            | opt-in: run the cockpit ShellSpec lane (~150 MB extra packages)                 |
+| `BIB_ROOTFS`            | unset                            | bib `--rootfs <type>` (e.g. `btrfs`, `xfs`); required for Fedora bootc bases (R-017) |
 
 ## Smoke test
 
 `vm/tests/smoke.sh` is a thin wrapper around [ShellSpec](https://shellspec.info/)
-running the suites under `vm/spec/`. The default lane covers preflight,
-create, cloud-init readiness, internet, ssh + sudo, snapshot, cockpit
-overlay, destroy residue, idempotency, and parallel-safety on
-`fedora-cloud` (~5 min on a warm cache). The kinoite lane is opt-in.
+running the suites under `vm/spec/`. The default lane (~5 min on a warm
+cache) covers specs 00–40 on `fedora-cloud`: preflight, create, cloud-init
+readiness, internet, ssh + sudo, snapshot. Specs 60/65/70/80
+(destroy-residue, prune, idempotency, parallel-safety) are exercised
+**standalone** because the suite hits a cosmetic ShellSpec abort after
+spec 40 (R-016 in `DEPLOYMENT.md`); the wrapper handles the abort by
+exiting 0 when failures + errors are both zero. Cockpit (50) and kinoite
+(90) lanes are opt-in via `VM_E2E_COCKPIT=1` / `VM_E2E_KINOITE=1`.
 
 ```bash
 ./vm/tests/smoke.sh                                # default lane
