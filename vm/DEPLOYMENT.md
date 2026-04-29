@@ -1,8 +1,8 @@
 # vm/ Deployment & Test Status
 
 **Status:** green / smoke green + bootc lane proven + live-VM re-verified —
-default ShellSpec lane runs **24 examples · 0 failures · 0 warnings ·
-0 errors** in 307–319 s, and both disposable VMs are up right now:
+default ShellSpec lane runs **27 examples · 0 failures** in ~370 s, and
+both disposable VMs are up right now:
 `disposable-fedora` at `192.168.122.216` (Fedora 43 Cloud, kernel
 6.17.1-300.fc43.x86_64) and `disposable-bootc` at `192.168.122.243`
 (CentOS Stream 9 bootc, kernel 5.14.0-691.el9.x86_64). Both boot UEFI
@@ -35,9 +35,11 @@ the pending Fedora 44 host bump (F44 went GA 2026-04-28).
 - End-to-end exercise on a real Fedora 43 + Kinoite host surfaced four bugs fixed in
   `2e1c338`, `8e22366`, `08f5405`, `49ecc0a` (`edc201f` for ShellSpec output config). VMs
   now boot, network out via the system bridge, and authenticate over SSH using per-VM keys.
-- The default ShellSpec lane runs via `./tests/smoke.sh` and is **green**: 24 examples,
-  0 failures, 0 warnings, 0 errors. Cockpit and kinoite specs are opt-in
-  (`VM_E2E_COCKPIT=1`, `VM_E2E_KINOITE=1`) so heavy installs stay out of the default lane.
+- The default ShellSpec lane runs via `./tests/smoke.sh` and is **green**: 27 examples,
+  0 failures (specs 00 → 40 — R-016 prevents specs 60+ from running in the default lane).
+  Cockpit and kinoite specs are opt-in (`VM_E2E_COCKPIT=1`, `VM_E2E_KINOITE=1`); residue,
+  prune, idempotency, and parallel-safety specs (60/65/70/80) are exercised standalone
+  (see Verification Runbook).
 - All VMs boot UEFI (OVMF firmware via `--boot firmware=efi`); per-VM NVRAM lives in
   `~/.config/libvirt/qemu/nvram/<name>_VARS.qcow2` and is cleaned up by `vm destroy`.
 - The bootc lane is now proven end-to-end via a derived OCI: build with
@@ -51,14 +53,9 @@ the pending Fedora 44 host bump (F44 went GA 2026-04-28).
 
 ## Scope
 
-This document covers the `vm/` subsystem of the `scripts` repo. It does not cover the untracked
-`bash/` directory, the deleted `skill-forced-eval-hook.sh`, or the broader repo. Everything
-referenced here lives under `vm/`.
-
-Repo-wide enforcement (pre-commit hooks, betterleaks secret scanning, commitlint, markdownlint,
-shellcheck/shfmt baseline) ships from sibling branches `chore/bootstrap-pre-commit-baseline` and
-`chore/lint-cleanup-shellcheck`. See the root [`CHANGELOG.md`](../CHANGELOG.md) and
-[`README.md`](../README.md) for repo-level scope.
+This document covers the `vm/` subsystem of the `scripts` repo. The repo-root `bash/`
+directory (one-off hook scripts) and `.toolbox/` (dev-environment Containerfile +
+setup) are out of scope here. Repo-wide context lives in [`../CLAUDE.md`](../CLAUDE.md).
 
 ## Host Prerequisites
 
@@ -159,21 +156,22 @@ Status legend: `[ ]` open · `[x]` done · `[~]` in progress · `[!]` blocked
 ShellSpec specs under [`spec/`](spec/), run via [`tests/smoke.sh`](tests/smoke.sh). TAP/JUnit
 formatters available; default is documentation format.
 
-Smoke run `ba14imuzv` 2026-04-26 (310.5 s). 24 examples, 0 failures, 0 warnings, 0 errors.
+Smoke run 2026-04-29 (368.5 s). 27 examples, 0 failures.
 Wrapper exits 0 with `[smoke] shellspec aborted with 0 failures — treating as success.`
 on the cosmetic ShellSpec abort flag (R-015).
 
 | Spec                                                                                | Target           | Mechanism    | Status        | Last run         | Evidence                                                                     |
 | ----------------------------------------------------------------------------------- | ---------------- | ------------ | ------------- | ---------------- | ---------------------------------------------------------------------------- |
-| [`00_preflight_spec.sh`](spec/00_preflight_spec.sh)                                  | host             | unit + e2e   | `[x]` 8 PASS  | 2026-04-26       | OS-id check, `/dev/kvm`, binaries, `virsh` reachability, dispatcher help/usage. |
-| [`10_create_fedora_cloud_spec.sh`](spec/10_create_fedora_cloud_spec.sh)              | fedora-cloud     | e2e          | `[x]` 5 PASS  | 2026-04-26       | Domain, overlay, seed dir, metadata sidecar, ed25519 keypair all materialize. |
-| [`20_cloud_init_and_net_spec.sh`](spec/20_cloud_init_and_net_spec.sh)                | fedora-cloud     | e2e          | `[x]` 3 PASS  | 2026-04-26       | `cloud-init status --wait` clean, `fedoraproject.org` reachable, `quay.io` resolves. |
-| [`30_ssh_and_sudo_spec.sh`](spec/30_ssh_and_sudo_spec.sh)                            | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-26       | Per-VM key auth + passwordless sudo + password-auth refused + key-active.    |
-| [`40_snapshot_reset_spec.sh`](spec/40_snapshot_reset_spec.sh)                        | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-26       | Snapshot create, drift install, reset reverts, snapshot still present.       |
+| [`00_preflight_spec.sh`](spec/00_preflight_spec.sh)                                  | host             | unit + e2e   | `[x]` 9 PASS  | 2026-04-29       | OS-id check (incl. allowlist), `/dev/kvm`, binaries, `virsh` reachability, dispatcher help/usage. |
+| [`10_create_fedora_cloud_spec.sh`](spec/10_create_fedora_cloud_spec.sh)              | fedora-cloud     | e2e          | `[x]` 7 PASS  | 2026-04-29       | Domain, overlay, seed dir, metadata sidecar, ed25519 keypair, UEFI host XML + guest. |
+| [`20_cloud_init_and_net_spec.sh`](spec/20_cloud_init_and_net_spec.sh)                | fedora-cloud     | e2e          | `[x]` 3 PASS  | 2026-04-29       | `cloud-init status --wait` clean, `fedoraproject.org` reachable, `quay.io` resolves. |
+| [`30_ssh_and_sudo_spec.sh`](spec/30_ssh_and_sudo_spec.sh)                            | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-29       | Per-VM key auth + passwordless sudo + sshd-effective `passwordauthentication=no` + key-active. |
+| [`40_snapshot_reset_spec.sh`](spec/40_snapshot_reset_spec.sh)                        | fedora-cloud     | e2e          | `[x]` 4 PASS  | 2026-04-29       | Snapshot create, drift install, reset reverts, snapshot still present.       |
 | [`50_cockpit_spec.sh`](spec/50_cockpit_spec.sh)                                      | fedora-cloud × 2 | e2e (opt-in) | `[ ]` skipped | (n/a)            | `VM_E2E_COCKPIT=1` — not exercised in default lane.                          |
-| [`60_destroy_residue_spec.sh`](spec/60_destroy_residue_spec.sh) *                    | fedora-cloud     | e2e          | `[~]` 7 PASS  | 2026-04-26 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
-| [`70_idempotency_spec.sh`](spec/70_idempotency_spec.sh) *                            | fedora-cloud     | e2e          | `[~]` 5 PASS  | 2026-04-26 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
-| [`80_parallel_safety_spec.sh`](spec/80_parallel_safety_spec.sh) *                    | host (lock)      | unit         | `[~]` 2 PASS  | 2026-04-26 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
+| [`60_destroy_residue_spec.sh`](spec/60_destroy_residue_spec.sh) *                    | fedora-cloud     | e2e          | `[~]` 7 PASS  | 2026-04-29 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
+| [`65_prune_spec.sh`](spec/65_prune_spec.sh) *                                        | host (synthetic) | unit         | `[~]` 5 PASS  | 2026-04-29 (iso) | Dry-run, --apply, idempotency, held-lock skip, EXIT_USAGE on bogus arg.      |
+| [`70_idempotency_spec.sh`](spec/70_idempotency_spec.sh) *                            | fedora-cloud     | e2e          | `[~]` 6 PASS  | 2026-04-29 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
+| [`80_parallel_safety_spec.sh`](spec/80_parallel_safety_spec.sh) *                    | host (lock)      | unit         | `[~]` 2 PASS  | 2026-04-29 (iso) | Standalone run green; full lane stops mid-suite (R-016).                     |
 | [`90_kinoite_spec.sh`](spec/90_kinoite_spec.sh)                                      | kinoite          | e2e (opt-in) | `[ ]` skipped | (n/a)            | `VM_E2E_KINOITE=1` — not exercised in default lane.                          |
 
 \* In the full lane, ShellSpec stops emitting examples after spec 40 even though every spec runs cleanly when invoked directly. The wrapper's success-on-cosmetic-abort logic keeps the lane green; standalone invocation (`shellspec spec/60_destroy_residue_spec.sh`) confirms 60/70/80 all pass. Tracked as R-016.
@@ -214,10 +212,10 @@ Means Phase 2 is complete.
 ./vm/tests/smoke.sh
 ```
 
-Expected: `24 examples, 0 failures, aborted by an unexpected error` followed by
+Expected: `27 examples, 0 failures, aborted by an unexpected error` followed by
 `[smoke] shellspec aborted with 0 failures — treating as success.` and exit 0.
 Wall clock 5–6 min on a warm cache. Means Phases 3 + 4 are green; the `[~]` rows in the Test
-Matrix (specs 60/70/80) are validated separately (see Idempotency / parallel-safety lane).
+Matrix (specs 60/65/70/80) are validated separately (see Idempotency / parallel-safety lane).
 
 ### Cockpit lane (opt-in)
 
@@ -231,10 +229,11 @@ Expected: two parallel fedora-cloud VMs (with + without `--with-cockpit`) verify
 ### Idempotency / parallel-safety / residue lane (standalone)
 
 ```bash
-shellspec spec/60_destroy_residue_spec.sh spec/70_idempotency_spec.sh spec/80_parallel_safety_spec.sh
+shellspec spec/60_destroy_residue_spec.sh spec/65_prune_spec.sh \
+          spec/70_idempotency_spec.sh spec/80_parallel_safety_spec.sh
 ```
 
-Expected: 14 examples, 0 failures. These pass in isolation; the full default lane currently
+Expected: 20 examples, 0 failures. These pass in isolation; the full default lane currently
 stops emitting after spec 40 (R-016) but the wrapper still exits 0 on the cosmetic abort.
 
 ### Kinoite lane
@@ -395,9 +394,7 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Cross-References
 
-- Repo-wide tracker: [`../STATUS.md`](../STATUS.md) (forward-looking branch queue + verification chain)
-- Repo-wide history: [`../CHANGELOG.md`](../CHANGELOG.md)
-- Repo-wide overview: [`../README.md`](../README.md)
+- Repo-wide context: [`../CLAUDE.md`](../CLAUDE.md)
 - Subsystem README: [`README.md`](README.md)
 - Setup script: [`setup.sh`](setup.sh)
 - Dispatcher: [`scripts/vm`](scripts/vm)

@@ -140,10 +140,14 @@ Honored everywhere:
 ## Smoke test
 
 `vm/tests/smoke.sh` is a thin wrapper around [ShellSpec](https://shellspec.info/)
-running the suites under `vm/spec/`. The default lane covers preflight,
-create, cloud-init readiness, internet, ssh + sudo, snapshot, cockpit
-overlay, destroy residue, idempotency, and parallel-safety on
-`fedora-cloud` (~5 min on a warm cache). The kinoite lane is opt-in.
+running the suites under `vm/spec/`. The default lane (~5 min on a warm
+cache) covers specs 00–40 on `fedora-cloud`: preflight, create, cloud-init
+readiness, internet, ssh + sudo, snapshot. Specs 60/65/70/80
+(destroy-residue, prune, idempotency, parallel-safety) are exercised
+**standalone** because the suite hits a cosmetic ShellSpec abort after
+spec 40 (R-016 in `DEPLOYMENT.md`); the wrapper handles the abort by
+exiting 0 when failures + errors are both zero. Cockpit (50) and kinoite
+(90) lanes are opt-in via `VM_E2E_COCKPIT=1` / `VM_E2E_KINOITE=1`.
 
 ```bash
 ./vm/tests/smoke.sh                                # default lane

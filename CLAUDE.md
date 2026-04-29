@@ -163,7 +163,8 @@ and `VM_E2E_KINOITE=1` respectively and stay opt-in.
 ## Status doc
 
 `vm/DEPLOYMENT.md` is the source of truth for what's verified, what's
-pinned, and the risk register (R-001 through R-018, with R-003
-`BIB_VERSION="latest"` and R-013 session-network setup as the
-currently-open ones worth knowing about). It has its own "How to update
-this doc" section near the bottom.
+pinned, and the risk register (R-001 through R-019, with R-003
+`BIB_VERSION="latest"`, R-013 session-network setup, and R-019 (Fedora 44
+host bump — F44 went GA 2026-04-28) as the currently-open ones worth
+knowing about). It has its own "How to update this doc" section near
+the bottom.
