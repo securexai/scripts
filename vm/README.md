@@ -132,7 +132,7 @@ Honored everywhere:
 | `NO_COLOR=1`            | unset                            | suppress ANSI colors in log/warn/error                                          |
 | `USE_LIBVIRT_GROUP=1`   | unset (only consumed by setup.sh)| add user to `libvirt` group for `qemu:///system`                                |
 | `VM_PREFLIGHT`          | `fast`                           | dispatcher preflight mode: `fast` (env-only), `full`, `none`                    |
-| `VM_EXPECTED_FEDORA`    | `43`                             | expected `VERSION_ID` for the OS-ID check                                       |
+| `VM_EXPECTED_FEDORA`    | `43`                             | expected `VERSION_ID` allowlist (whitespace-separated; e.g. `"43 44"`)          |
 | `VM_E2E_KINOITE`        | unset                            | opt-in: run the kinoite ShellSpec lane (10–25 min)                              |
 | `VM_E2E_COCKPIT`        | unset                            | opt-in: run the cockpit ShellSpec lane (~150 MB extra packages)                 |
 | `BIB_ROOTFS`            | unset                            | bib `--rootfs <type>` (e.g. `btrfs`, `xfs`); required for Fedora bootc bases (R-017) |

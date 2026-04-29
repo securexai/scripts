@@ -17,8 +17,11 @@
 readonly _VM_LIB_PREFLIGHT_LOADED=1
 
 # Pure: parse /etc/os-release for ID and VERSION_ID. Returns 0 if
-# ID=fedora and VERSION_ID matches the expected value (default: 43).
-# Args: [expected_version_id]
+# ID=fedora and VERSION_ID matches one of the expected values
+# (whitespace-separated allowlist; default: "43"). Lets a single
+# preflight straddle a Fedora version bump (e.g. "43 44") without
+# branching the codebase. Tracked under R-019.
+# Args: [expected_version_id_allowlist]
 preflight_check_os_id() {
   local expected="${1:-43}"
   local os_release="/etc/os-release"
@@ -30,11 +33,13 @@ preflight_check_os_id() {
     error "host OS is '${id}', expected 'fedora'"
     return 1
   fi
-  if [[ "${version_id}" != "${expected}" ]]; then
-    error "host Fedora version is '${version_id}', expected '${expected}'"
-    return 1
-  fi
-  return 0
+  local _allow=() v
+  read -ra _allow <<< "${expected}"
+  for v in "${_allow[@]}"; do
+    [[ "${version_id}" == "${v}" ]] && return 0
+  done
+  error "host Fedora version is '${version_id}', expected one of: ${expected}"
+  return 1
 }
 
 # /dev/kvm exists and is read+write by the current user.
