@@ -9,9 +9,13 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/../lib/paths.sh"
 # shellcheck source=../lib/libvirt.sh
 . "${SCRIPT_DIR}/../lib/libvirt.sh"
+# shellcheck source=../lib/locks.sh
+. "${SCRIPT_DIR}/../lib/locks.sh"
 
-(( $# == 1 )) || die "usage: vm destroy <name>"
+(( $# == 1 )) || die_with "${EXIT_USAGE}" "usage: vm destroy <name>"
 name="$1"
+
+vm_lock_acquire "${name}"
 
 vm_destroy   "${name}"
 vm_undefine  "${name}"
@@ -21,5 +25,7 @@ seed_dir="${SEED_DIR}/${name}"
 
 [[ -f "${overlay_disk}" ]] && { log "removing overlay disk ${overlay_disk}"; rm -f "${overlay_disk}"; }
 [[ -d "${seed_dir}"     ]] && { log "removing seed dir ${seed_dir}";        rm -rf "${seed_dir}"; }
+
+vm_lock_release_and_unlink "${name}"
 
 log "destroyed ${name}"

@@ -1,0 +1,5 @@
+--require spec_helper
+--format documentation
+--default-path spec
+--shell bash
+--error-exit-code 1

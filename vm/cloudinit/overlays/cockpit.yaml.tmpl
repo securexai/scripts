@@ -1,0 +1,20 @@
+
+# --- overlay: cockpit ---
+# Installs cockpit (web admin UI on :9090), enables the socket-activated
+# cockpit.socket so the daemon spins up on first request, and opens 9090
+# in firewalld. Reaches the host via the libvirt default NAT — the host
+# can curl https://<vm-ip>:9090.
+#
+# Appended to the rendered user-data by cloudinit.sh::_apply_overlay.
+# Lines starting with `#cloud-config` are intentionally omitted because
+# the base user-data already supplies that header.
+
+packages:
+  - cockpit
+  - cockpit-system
+  - cockpit-machines
+
+runcmd:
+  - [ systemctl, enable, --now, cockpit.socket ]
+  - [ firewall-cmd, --permanent, --add-service=cockpit ]
+  - [ firewall-cmd, --reload ]

@@ -5,6 +5,10 @@
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 . "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/paths.sh
+. "${SCRIPT_DIR}/lib/paths.sh"
+# shellcheck source=lib/preflight.sh
+. "${SCRIPT_DIR}/lib/preflight.sh"
 
 usage() {
   cat <<'EOF' >&2
@@ -19,16 +23,20 @@ usage: vm <subcommand> [args...]
   reset    <name> <snap>         revert to snapshot
   list                           tidy virsh list --all
   status   <name>                state, IP, snapshots, disk path
+  prune    [--apply] [--quiet]   remove orphan disks/seeds/locks (dry-run default)
   build-kinoite                  build the Kinoite qcow2 via bib (slow)
 
 Env overrides honored everywhere:
   LIBVIRT_DEFAULT_URI            default qemu:///session
   XDG_CACHE_HOME                 image cache root
   XDG_STATE_HOME                 disk + seed root
-  VM_SSH_PUBKEY                  default ~/.ssh/id_ed25519.pub
+  VM_SSH_PUBKEY                  opt-in: inject this host pubkey
+                                 (default: per-VM ephemeral ed25519)
   REBUILD=1                      force re-download / rebuild
   TRACE=1                        bash xtrace
   NO_COLOR=1                     suppress color
+  VM_PREFLIGHT=fast|full|none    preflight mode (default: fast)
+  VM_EXPECTED_FEDORA             expected Fedora VERSION_ID (default: 43)
 EOF
 }
 
@@ -43,6 +51,20 @@ esac
 cmd="$1"; shift
 sub="${SCRIPT_DIR}/subcommands/${cmd}.sh"
 
-[[ -x "${sub}" ]] || die "unknown subcommand: ${cmd} — run 'vm help' for the list"
+[[ -x "${sub}" ]] || die_with "${EXIT_USAGE}" "unknown subcommand: ${cmd} — run 'vm help' for the list"
+
+# Preflight: fast path on every dispatch (env-only, no fork). Full path
+# opt-in via VM_PREFLIGHT=full when debugging. Read-only subcommands
+# (list, status, help) skip even the fast path — they don't touch state.
+case "${cmd}" in
+  list|status) ;;
+  *)
+    case "${VM_PREFLIGHT:-fast}" in
+      none) ;;
+      full) preflight_full ;;
+      fast|*) preflight_fast ;;
+    esac
+    ;;
+esac
 
 exec "${sub}" "$@"

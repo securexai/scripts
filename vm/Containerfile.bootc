@@ -1,0 +1,44 @@
+# Derived bootc OCI for the disposable-VM lane.
+#
+# centos-bootc:stream9 is the smallest OCI that ships the bib metadata
+# (DefaultRootFs) bib `latest` requires. It does NOT ship cloud-init,
+# so the per-VM seed ISO (SSH key, hostname, hostkey) wouldn't apply
+# on first boot. This image layers cloud-init on top, then re-commits
+# the bootc container so bib can ingest it cleanly.
+#
+# Build (rootful — bib runs rootful and reads from root's libpod store):
+#   sudo podman build -t localhost/scripts-vm-bootc:latest \
+#     -f vm/Containerfile.bootc vm/
+#
+# Get the digest:
+#   sudo podman inspect --format '{{.Digest}}' localhost/scripts-vm-bootc:latest
+#
+# Repoint vm/targets/kinoite.env (bare localhost ref — bib's parser
+# rejects `containers-storage:<...>` and the prefix match in bib.sh
+# only matches `localhost/*`, so anything else falls through to a
+# `podman pull` that doesn't accept the transport-prefixed form):
+#   OCI_REF="localhost/scripts-vm-bootc:latest"
+#   OCI_DIGEST=<digest from above>
+
+# Base pinned by digest so a moved upstream `stream9` tag can't silently
+# change layer content under us. Re-pin via `skopeo inspect` when a
+# refresh is intentional.
+FROM quay.io/centos-bootc/centos-bootc:stream9@sha256:2b91cbde73cd6c43ff2eacde9ef9ef760ef35cfea48a7ce9eecd74814b51a083
+
+RUN dnf -y install cloud-init && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+# Enable cloud-init systemd targets inside the image (bib `latest` no
+# longer accepts `customizations.services` to drive this from the bib
+# config layer). The default systemd preset for cloud-init is
+# `disabled`; flip the four units explicitly.
+RUN systemctl enable cloud-init-local.service \
+                     cloud-init.service \
+                     cloud-config.service \
+                     cloud-final.service
+
+# Smoke-check: ensure the bootc container metadata is intact after the
+# layer. `bootc container lint` is opt-in upstream; ignore failures so
+# older base images don't block the build.
+RUN bootc container lint || true

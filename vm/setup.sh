@@ -16,45 +16,14 @@
 #   USE_LIBVIRT_GROUP=1 ./vm/setup.sh   # also add user to libvirt group
 #   TRACE=1 ./vm/setup.sh               # verbose xtrace
 
-set -o errexit
-set -o nounset
-set -o pipefail
-set -o errtrace
-shopt -s inherit_errexit
-shopt -s nullglob
-
-if (( BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 3) )); then
-  printf 'ERROR: This script requires Bash 5.3+. Current: %s\n' "$BASH_VERSION" >&2
-  exit 1
-fi
-
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-if [[ -t 2 ]] && [[ -z "${NO_COLOR:-}" ]]; then
-  readonly _C_RESET=$'\033[0m'
-  readonly _C_INFO=$'\033[1;34m'
-  readonly _C_WARN=$'\033[1;33m'
-  readonly _C_ERR=$'\033[1;31m'
-else
-  readonly _C_RESET=''
-  readonly _C_INFO=''
-  readonly _C_WARN=''
-  readonly _C_ERR=''
-fi
-
-log()   { printf '%sinfo%s  %s\n' "${_C_INFO}" "${_C_RESET}" "$*" >&2; }
-warn()  { printf '%swarn%s  %s\n' "${_C_WARN}" "${_C_RESET}" "$*" >&2; }
-error() { printf '%serror%s %s\n' "${_C_ERR}"  "${_C_RESET}" "$*" >&2; }
-die()   { error "$*"; exit 1; }
-
-[[ "${TRACE:-0}" == "1" ]] && set -o xtrace
-
-trap 'rc=$?; printf "%serror%s %s:%s: \"%s\" exited %s\n" "${_C_ERR}" "${_C_RESET}" "${BASH_SOURCE[0]}" "${LINENO}" "${BASH_COMMAND}" "${rc}" >&2' ERR
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 \
-    || die "required command not found on PATH: $1"
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+# shellcheck source=scripts/lib/common.sh
+. "${SCRIPT_DIR}/scripts/lib/common.sh"
+# shellcheck source=scripts/lib/paths.sh
+. "${SCRIPT_DIR}/scripts/lib/paths.sh"
+# shellcheck source=scripts/lib/preflight.sh
+. "${SCRIPT_DIR}/scripts/lib/preflight.sh"
 
 readonly REQUIRED_PACKAGES=(
   libvirt-daemon-kvm
@@ -84,14 +53,27 @@ ensure_packages() {
   warn "rpm-ostree may have staged a new deployment — REBOOT REQUIRED before vm subcommands work"
 }
 
-ensure_libvirtd_socket() {
-  if systemctl --user is-active --quiet libvirtd.socket; then
-    log "user libvirtd.socket already active"
+ensure_libvirt_reachable() {
+  local uri="${LIBVIRT_DEFAULT_URI:-qemu:///session}"
+  if virsh -c "${uri}" hostname >/dev/null 2>&1; then
+    log "libvirt reachable on ${uri}"
     return 0
   fi
-  log "enabling user libvirtd.socket"
-  systemctl --user enable --now libvirtd.socket \
-    || die "failed to enable libvirtd.socket — is libvirt installed and have you rebooted since rpm-ostree install?"
+  # Fedora 43 ships modular libvirt daemons (virtqemud, virtnetworkd, ...).
+  # The legacy monolithic libvirtd.socket may not exist. For qemu:///session
+  # virtqemud is auto-launched by virsh on first connect, but if a user-scope
+  # socket unit is shipped, prefer enabling it for socket-activated startup.
+  local unit
+  for unit in virtqemud.socket libvirtd.socket; do
+    systemctl --user list-unit-files "${unit}" 2>/dev/null | grep -qF "${unit}" || continue
+    log "enabling user ${unit}"
+    systemctl --user enable --now "${unit}" 2>/dev/null || continue
+    if virsh -c "${uri}" hostname >/dev/null 2>&1; then
+      log "libvirt reachable on ${uri} (via ${unit})"
+      return 0
+    fi
+  done
+  die "libvirt not reachable on ${uri} — install libvirt-daemon-driver-qemu and re-run; for qemu:///session, virtqemud auto-launches and no explicit socket is required"
 }
 
 ensure_libvirt_group() {
@@ -111,11 +93,21 @@ main() {
   require_cmd jq
 
   ensure_packages
-  ensure_libvirtd_socket
+  ensure_libvirt_reachable
   ensure_libvirt_group
 
+  # Run preflight only if the libvirt clients are actually present in this
+  # boot. After a fresh rpm-ostree install the binaries land on the staged
+  # deployment but aren't on $PATH until reboot — running preflight then
+  # would mis-report the gap as a hard failure.
+  if command -v virsh >/dev/null 2>&1; then
+    log "running preflight (full)"
+    preflight_full
+  else
+    warn "virsh not on PATH yet — REBOOT then re-run ./vm/setup.sh to validate preflight"
+  fi
+
   log "vm/ host setup complete"
-  log "sanity check: virsh -c qemu:///session list --all"
 }
 
 main "$@"

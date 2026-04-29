@@ -16,8 +16,10 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/../lib/cloudinit.sh"
 # shellcheck source=../lib/libvirt.sh
 . "${SCRIPT_DIR}/../lib/libvirt.sh"
+# shellcheck source=../lib/locks.sh
+. "${SCRIPT_DIR}/../lib/locks.sh"
 
-readonly _CREATE_VM_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+readonly _CREATE_VM_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 readonly TARGETS_DIR="${_CREATE_VM_ROOT}/targets"
 
 usage() {
@@ -28,7 +30,10 @@ usage: vm create --target {fedora-cloud|kinoite} --name <vm-name> [options]
   --cpus N         override target default
   --mem MIB        override target default
   --disk GIB       override target default (overlay capacity)
-  --overlay <n>    per-VM cloudinit overlay name (under cloudinit/overlays/<n>/)
+  --overlay <n>    cloudinit overlay file (cloudinit/overlays/<n>.yaml.tmpl)
+  --with-cockpit   install + enable cockpit on :9090 (combines an
+                   overlay for fedora-cloud with kinoite-cockpit.toml
+                   for the kinoite target)
 EOF
 }
 
@@ -38,26 +43,48 @@ cpus=""
 mem=""
 disk=""
 overlay=""
+with_cockpit=0
 
 while (( $# > 0 )); do
   case "$1" in
-    --target)     target="$2"; shift 2;;
-    --name)       name="$2"; shift 2;;
-    --persistent) shift;;
-    --cpus)       cpus="$2"; shift 2;;
-    --mem)        mem="$2"; shift 2;;
-    --disk)       disk="$2"; shift 2;;
-    --overlay)    overlay="$2"; shift 2;;
-    -h|--help)    usage; exit 0;;
-    *)            usage; die "unknown arg: $1";;
+    --target)       target="$2"; shift 2;;
+    --name)         name="$2"; shift 2;;
+    --persistent)   shift;;
+    --cpus)         cpus="$2"; shift 2;;
+    --mem)          mem="$2"; shift 2;;
+    --disk)         disk="$2"; shift 2;;
+    --overlay)      overlay="$2"; shift 2;;
+    --with-cockpit) with_cockpit=1; shift;;
+    -h|--help)      usage; exit 0;;
+    *)              usage; die_with "${EXIT_USAGE}" "unknown arg: $1";;
   esac
 done
 
-[[ -n "${target}" ]] || { usage; die "--target required"; }
-[[ -n "${name}"   ]] || { usage; die "--name required"; }
+[[ -n "${target}" ]] || { usage; die_with "${EXIT_USAGE}" "--target required"; }
+[[ -n "${name}"   ]] || { usage; die_with "${EXIT_USAGE}" "--name required"; }
+
+# --overlay and --with-cockpit are mutually exclusive (a single overlay
+# is appended; combining would require a multi-overlay merge we don't
+# implement yet). Surface the conflict instead of silently dropping one.
+if [[ -n "${overlay}" ]] && (( with_cockpit )); then
+  die_with "${EXIT_USAGE}" "--overlay and --with-cockpit cannot be combined (yet)"
+fi
+if (( with_cockpit )) && [[ "${target}" != "fedora-cloud" && "${target}" != "kinoite" ]]; then
+  die_with "${EXIT_USAGE}" "--with-cockpit only supports fedora-cloud and kinoite (got: ${target})"
+fi
+# For fedora-cloud, cockpit ships via cloud-init overlay. For kinoite,
+# cockpit ships baked into the bib qcow2 (kinoite-cockpit.toml) — no
+# overlay needed.
+if (( with_cockpit )) && [[ "${target}" == "fedora-cloud" ]]; then
+  overlay="cockpit"
+fi
 
 target_env="${TARGETS_DIR}/${target}.env"
-[[ -r "${target_env}" ]] || die "target not found: ${target_env}"
+[[ -r "${target_env}" ]] || die_with "${EXIT_USAGE}" "target not found: ${target_env}"
+
+# Acquired after usage validation so a typo in --target doesn't leave
+# an orphan lockfile that destroy.sh would never come back to clean.
+vm_lock_acquire "${name}"
 
 # shellcheck disable=SC1090
 . "${target_env}"
@@ -74,14 +101,18 @@ case "${target}" in
   kinoite)
     # shellcheck source=../lib/bib.sh
     . "${SCRIPT_DIR}/../lib/bib.sh"
-    base=$(build_kinoite_qcow "${target_env}")
+    if (( with_cockpit )); then
+      base=$(build_kinoite_qcow "${target_env}" "kinoite-cockpit.toml")
+    else
+      base=$(build_kinoite_qcow "${target_env}")
+    fi
     ;;
-  *) die "unknown target: ${target} (no acquisition path)";;
+  *) die_with "${EXIT_USAGE}" "unknown target: ${target} (no acquisition path)";;
 esac
 
 # Refuse to clobber an existing domain of the same name.
 if virsh -c "${LIBVIRT_URI}" dominfo "${name}" >/dev/null 2>&1; then
-  die "VM '${name}' already exists — 'vm destroy ${name}' first"
+  die_with "${EXIT_USAGE}" "VM '${name}' already exists — 'vm destroy ${name}' first"
 fi
 
 require_cmd qemu-img
@@ -91,8 +122,8 @@ overlay_disk="${DISK_DIR}/${name}.qcow2"
 log "creating COW overlay: ${overlay_disk} (backed by ${base}, capacity ${disk_gib}G)"
 qemu-img create -f qcow2 -F qcow2 -b "${base}" "${overlay_disk}" "${disk_gib}G" >/dev/null
 
-# Cloud-init seed.
-seed=$(render_seed "${name}")
+# Cloud-init seed (overlay applied if --overlay or --with-cockpit set).
+seed=$(render_seed "${name}" "${overlay}")
 
 # Sidecar metadata so other subcommands (ssh, status) know which user to use.
 mkdir -p "${SEED_DIR}/${name}"
@@ -100,16 +131,31 @@ mkdir -p "${SEED_DIR}/${name}"
   printf 'TARGET=%s\n'        "${target}"
   printf 'DEFAULT_USER=%s\n'  "${DEFAULT_USER}"
   printf 'OS_VARIANT=%s\n'    "${OS_VARIANT}"
+  printf 'OVERLAY=%s\n'       "${overlay}"
+  printf 'WITH_COCKPIT=%s\n'  "${with_cockpit}"
 } > "${SEED_DIR}/${name}/.metadata"
 
 # Define + start.
 vm_define "${name}" "${overlay_disk}" "${seed}" "${OS_VARIANT}" "${cpus}" "${mem}"
 
-# Block until reachable.
+# Block until SSH responds.
 ip=$(wait_for_ssh "${name}" 240)
+
+# Cloud-init readiness gate. Exit codes per cloud-init upstream:
+#   0 = clean, 2 = non-fatal warning, 1 = fatal. Anything other than 1 is
+# acceptable — modules may emit warnings on minimal images without
+# breaking the seed.
+log "waiting for cloud-init to finish on ${name}"
+if ! vm_ssh_run "${name}" 'cloud-init status --wait; rc=$?; [[ $rc -ne 1 ]]'; then
+  die_with "${EXIT_CLOUDINIT}" "cloud-init reported a fatal error on ${name} — see 'vm ssh ${name} -- sudo cloud-init status --long'"
+fi
+
+# Outbound network probe. The libvirt default network is NAT-attached;
+# if this fails the VM is up but isolated from the internet.
+log "probing outbound network on ${name}"
+if ! vm_ssh_run "${name}" 'curl -fsS --max-time 5 https://fedoraproject.org -o /dev/null'; then
+  die_with "${EXIT_NET}" "VM cannot reach https://fedoraproject.org — check libvirt default NAT and DNS"
+fi
+
 log "VM '${name}' ready at ${ip} (ssh ${DEFAULT_USER}@${ip})"
 log "next: 'vm ssh ${name}' or 'vm destroy ${name}'"
-
-# Overlay-name flag accepted but not yet wired through to cloudinit.sh.
-# Reserved for the upcoming overlay-merge feature (see cloudinit/overlays/.gitkeep).
-[[ -z "${overlay}" ]] || warn "--overlay '${overlay}' acknowledged but not yet implemented (see cloudinit/overlays/.gitkeep)"

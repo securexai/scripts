@@ -1,0 +1,32 @@
+# bootc-image-builder customizations for the Fedora 43 Kinoite VM target
+# WITH cockpit pre-installed in the image. Selected by `vm create
+# --target kinoite --with-cockpit` (see vm/scripts/subcommands/create.sh,
+# which overrides BIB_CONFIG_REL when the flag is present).
+#
+# Schema reference: https://github.com/osbuild/bootc-image-builder
+#
+# Diff vs kinoite.toml:
+#   - adds cockpit, cockpit-system, cockpit-machines to the layered set
+#     so the admin UI binaries are present in the qcow2; cockpit.socket
+#     enabling has to happen post-boot (see services-block note below)
+#
+# IMPORTANT: cloud-init must still be present in the OCI base (or
+# layered separately — see kinoite.toml notes) for the per-VM seed ISO
+# (SSH keys, hostname) to apply.
+
+[customizations]
+packages = ["cockpit", "cockpit-system", "cockpit-machines"]
+
+[[customizations.user]]
+name = "core"
+groups = ["wheel"]
+
+# bib `latest` (2026-04) reports "customizations.services: not supported"
+# (same diagnosis as kinoite.toml — the schema is gone, not just the
+# array-of-tables form). cloud-init services are enabled inside the
+# derived OCI image (Containerfile.bootc); cockpit.socket has no
+# equivalent enable hook today, so the user must run
+#   vm ssh <name> -- sudo systemctl enable --now cockpit.socket
+# on first boot, or layer cockpit into a derived Containerfile alongside
+# cloud-init. Tracked under R-017 (kinoite lane is upstream-blocked
+# anyway pending bib DefaultRootFs alignment).

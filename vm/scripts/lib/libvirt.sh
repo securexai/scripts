@@ -13,6 +13,7 @@
 #   get_ipv4    <name>           — print first IPv4 from libvirt's lease/ARP
 #   wait_for_ssh <name> [<timeout-seconds>]  — block until SSH is reachable
 #   ssh_to      <name> [args…]   — exec ssh with the standard option set
+#   vm_list_defined_domains      — print one domain name per line
 
 [[ -n "${_VM_LIB_LIBVIRT_LOADED:-}" ]] && return 0
 readonly _VM_LIB_LIBVIRT_LOADED=1
@@ -21,14 +22,26 @@ require_cmd virsh
 require_cmd virt-install
 require_cmd ssh
 
+# `virsh list --all --name` emits one name per line plus a trailing blank;
+# the awk filter drops empty lines so callers get a clean array.
+vm_list_defined_domains() {
+  virsh -c "${LIBVIRT_URI}" list --all --name 2>/dev/null | awk 'NF'
+}
+
 vm_define() {
   local name="$1" disk="$2" seed="$3" os_variant="$4" vcpus="$5" mem_mib="$6"
-  log "defining domain ${name} (vcpus=${vcpus}, mem=${mem_mib}MiB, disk=${disk})"
+  log "defining domain ${name} (vcpus=${vcpus}, mem=${mem_mib}MiB, disk=${disk}, firmware=uefi)"
+  # firmware=efi: libvirt picks an OVMF code+vars pair from its firmware
+  # descriptor list (requires edk2-ovmf on host). NVRAM lives under
+  # ${LIBVIRT_PREFIX}/qemu/nvram/<name>_VARS.fd and is cleaned up by
+  # vm_undefine via --nvram. Secure Boot stays disabled by default —
+  # bootc/cloud images aren't shim-signed for the libvirt enrollment chain.
   virt-install --connect "${LIBVIRT_URI}" \
     --name "${name}" \
     --memory "${mem_mib}" \
     --vcpus "${vcpus}" \
     --import \
+    --boot firmware=efi \
     --disk "path=${disk},bus=virtio,format=qcow2" \
     --disk "path=${seed},device=cdrom,readonly=on" \
     --os-variant "${os_variant}" \
@@ -58,7 +71,14 @@ vm_destroy() {
 
 vm_undefine() {
   local name="$1"
-  virsh -c "${LIBVIRT_URI}" undefine "${name}" --nvram >/dev/null 2>&1 || true
+  # --snapshots-metadata is required for domains that ever had a snapshot:
+  # libvirt refuses 'undefine' with 'cannot delete inactive domain with N
+  # snapshots' otherwise. The on-disk snapshot data lives inside the qcow2
+  # which the caller deletes anyway; this only purges libvirt's metadata.
+  # --checkpoints-metadata is the parallel option for incremental backups.
+  virsh -c "${LIBVIRT_URI}" undefine "${name}" \
+    --nvram --snapshots-metadata --checkpoints-metadata \
+    >/dev/null 2>&1 || true
 }
 
 vm_snapshot() {
@@ -73,21 +93,26 @@ vm_revert() {
   virsh -c "${LIBVIRT_URI}" snapshot-revert "${name}" "${snap}" --running --force >/dev/null
 }
 
-# Print first IPv4. Tries qemu-guest-agent first (only present if installed
-# in guest), falls back to libvirt's DHCP lease / ARP table.
+# Print first IPv4. Walks three sources in order:
+#   agent — qemu-guest-agent (only if installed in guest)
+#   lease — libvirt's DHCP lease table (works for NAT forward mode)
+#   arp   — host neighbor cache (required for 'bridge' forward mode where
+#           session libvirt has no lease table — the VM's MAC shows up via
+#           the host bridge's tap interface even though dnsmasq lives on
+#           the system network)
+# Returns 0 on first successful match; 1 if no source has an IPv4 yet.
 get_ipv4() {
   local name="$1"
-  local out
-  if out=$(virsh -c "${LIBVIRT_URI}" domifaddr "${name}" --source agent 2>/dev/null) \
-     && [[ -n "${out}" ]]; then
-    awk '$3 == "ipv4" { split($4, a, "/"); print a[1]; exit }' <<<"${out}"
-    return 0
-  fi
-  if out=$(virsh -c "${LIBVIRT_URI}" domifaddr "${name}" 2>/dev/null) \
-     && [[ -n "${out}" ]]; then
-    awk '$3 == "ipv4" { split($4, a, "/"); print a[1]; exit }' <<<"${out}"
-    return 0
-  fi
+  local out ip source
+  for source in agent lease arp; do
+    out=$(virsh -c "${LIBVIRT_URI}" domifaddr "${name}" --source "${source}" 2>/dev/null) \
+      || continue
+    ip=$(awk '$3 == "ipv4" && $1 != "lo" { split($4, a, "/"); print a[1]; exit }' <<<"${out}")
+    if [[ -n "${ip}" ]]; then
+      printf '%s' "${ip}"
+      return 0
+    fi
+  done
   return 1
 }
 
@@ -104,21 +129,50 @@ _ssh_opts=(
   -o ConnectTimeout=5
 )
 
+# Compose identity args for a VM. If a per-VM ephemeral key was generated
+# at create time (by cloudinit.sh::_resolve_vm_pubkey), use it explicitly
+# with IdentitiesOnly=yes so the agent or other configured identities
+# don't shadow it. Empty array if no per-VM key exists (user opted in to
+# host key via VM_SSH_PUBKEY, or this is a legacy VM created pre-B1).
+_vm_identity_args() {
+  local name="$1"
+  local key="${SEED_DIR}/${name}/ssh_key"
+  if [[ -f "${key}" ]]; then
+    printf -- '-i\n%s\n-o\nIdentitiesOnly=yes\n' "${key}"
+  fi
+}
+
 ssh_to() {
   local name="$1"; shift
   local user="${DEFAULT_USER:-fedora}" ip
-  ip=$(get_ipv4 "${name}") || die "no IPv4 address yet for ${name}"
-  exec ssh "${_ssh_opts[@]}" "${user}@${ip}" "$@"
+  ip=$(get_ipv4 "${name}") || die_with "${EXIT_LIBVIRT}" "no IPv4 address yet for ${name}"
+  local id_args=()
+  mapfile -t id_args < <(_vm_identity_args "${name}")
+  exec ssh "${_ssh_opts[@]}" "${id_args[@]}" "${user}@${ip}" "$@"
+}
+
+# Non-exec variant for callers that need to keep running after the
+# remote command finishes (readiness gates, probes, internal scripts).
+# Returns the remote exit code.
+vm_ssh_run() {
+  local name="$1"; shift
+  local user="${DEFAULT_USER:-fedora}" ip
+  ip=$(get_ipv4 "${name}") || die_with "${EXIT_LIBVIRT}" "no IPv4 address yet for ${name}"
+  local id_args=()
+  mapfile -t id_args < <(_vm_identity_args "${name}")
+  ssh "${_ssh_opts[@]}" "${id_args[@]}" "${user}@${ip}" "$@"
 }
 
 wait_for_ssh() {
   local name="$1" timeout="${2:-180}"
   local user="${DEFAULT_USER:-fedora}" ip
   log "waiting up to ${timeout}s for SSH on ${name}"
+  local id_args=()
+  mapfile -t id_args < <(_vm_identity_args "${name}")
   local end=$(( SECONDS + timeout ))
   while (( SECONDS < end )); do
     if ip=$(get_ipv4 "${name}") && [[ -n "${ip}" ]]; then
-      if ssh "${_ssh_opts[@]}" "${user}@${ip}" true 2>/dev/null; then
+      if ssh "${_ssh_opts[@]}" "${id_args[@]}" "${user}@${ip}" true 2>/dev/null; then
         log "SSH ready: ${user}@${ip}"
         printf '%s' "${ip}"
         return 0
@@ -126,5 +180,5 @@ wait_for_ssh() {
     fi
     sleep 3
   done
-  die "timed out waiting for SSH to ${name} (${timeout}s)"
+  die_with "${EXIT_NET}" "timed out waiting for SSH to ${name} (${timeout}s)"
 }

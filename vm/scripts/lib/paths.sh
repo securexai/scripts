@@ -5,7 +5,8 @@
 # Honors:
 #   XDG_CACHE_HOME, XDG_STATE_HOME (per spec)
 #   LIBVIRT_DEFAULT_URI            (defaults to qemu:///session)
-#   VM_SSH_PUBKEY                  (defaults to ~/.ssh/id_ed25519.pub)
+#   VM_SSH_PUBKEY                  (optional opt-in to host pubkey;
+#                                   default is per-VM ephemeral ed25519)
 
 [[ -n "${_VM_LIB_PATHS_LOADED:-}" ]] && return 0
 readonly _VM_LIB_PATHS_LOADED=1
@@ -23,9 +24,6 @@ readonly SEED_DIR="${XDG_STATE_BASE}/scripts-vm/seeds"
 # LIBVIRT_DEFAULT_URI=qemu:///system if vm/setup.sh added you to the
 # libvirt group.
 readonly LIBVIRT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///session}"
-
-# SSH pubkey injected via cloud-init user-data.
-readonly VM_SSH_PUBKEY_PATH="${VM_SSH_PUBKEY:-${HOME}/.ssh/id_ed25519.pub}"
 
 # Idempotent mkdirs for the writable dirs.
 mkdir -p "${IMAGE_CACHE_DIR}" "${DISK_DIR}" "${SEED_DIR}"

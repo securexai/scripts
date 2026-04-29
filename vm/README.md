@@ -4,6 +4,8 @@ Spin up real VMs on a Fedora 43 host (Kinoite or Workstation) to test,
 validate, and troubleshoot scripts in this repo. Native libvirt + cloud-init,
 no Vagrant / Packer / Ansible.
 
+> **Deployment status & test coverage:** see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
 ## Targets
 
 | Target          | Image acquisition           | Default user | RAM     | Disk  |
@@ -77,7 +79,9 @@ podman inspect --format '{{.Digest}}' quay.io/fedora-ostree-desktops/kinoite:43
 ## CLI surface
 
 ```text
-vm create   --target {fedora-cloud|kinoite} --name <n> [--cpus N] [--mem MIB] [--disk GIB] [--overlay <name>]
+vm create   --target {fedora-cloud|kinoite} --name <n>
+            [--cpus N] [--mem MIB] [--disk GIB]
+            [--overlay <name>] [--with-cockpit]
 vm start    <name>
 vm stop     <name>             graceful shutdown (force after 30 s)
 vm destroy  <name>             undefine + remove overlay disk + seed
@@ -86,8 +90,17 @@ vm snapshot <name> <snap>
 vm reset    <name> <snap>      revert to snapshot
 vm list                        tidy table from virsh list --all
 vm status   <name>             state, IP, snapshots, disk path
+vm prune    [--apply]          remove orphan disks/seeds/locks (dry-run default)
 vm build-kinoite               run the bib pipeline (slow, opt-in)
 ```
+
+`--with-cockpit` adds the cockpit web UI on port 9090. For `fedora-cloud` it
+applies a cloud-init overlay (packages + `cockpit.socket` + firewalld);
+for `kinoite` it switches the bib config to `kinoite-cockpit.toml` so cockpit
+ships in the qcow2.
+
+Every state-changing subcommand runs a fast preflight (env-only, no fork)
+on each invocation. Override with `VM_PREFLIGHT={fast|full|none}`.
 
 ## Storage layout
 
@@ -108,27 +121,38 @@ them explicitly or set `REBUILD=1`.
 
 Honored everywhere:
 
-| Var                     | Default                          | Effect                                           |
-| ----------------------- | -------------------------------- | ------------------------------------------------ |
-| `LIBVIRT_DEFAULT_URI`   | `qemu:///session`                | libvirt connection URI                           |
-| `XDG_CACHE_HOME`        | `~/.cache`                       | image cache root                                 |
-| `XDG_STATE_HOME`        | `~/.local/state`                 | disks + seeds root                               |
-| `VM_SSH_PUBKEY`         | `~/.ssh/id_ed25519.pub`          | pubkey injected via cloud-init                   |
-| `REBUILD=1`             | unset                            | force re-download / bib rebuild                  |
-| `TRACE=1`               | unset                            | bash xtrace                                      |
-| `NO_COLOR=1`            | unset                            | suppress ANSI colors in log/warn/error           |
-| `USE_LIBVIRT_GROUP=1`   | unset (only consumed by setup.sh)| add user to `libvirt` group for `qemu:///system` |
+| Var                     | Default                          | Effect                                                                          |
+| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
+| `LIBVIRT_DEFAULT_URI`   | `qemu:///session`                | libvirt connection URI                                                          |
+| `XDG_CACHE_HOME`        | `~/.cache`                       | image cache root                                                                |
+| `XDG_STATE_HOME`        | `~/.local/state`                 | disks + seeds root                                                              |
+| `VM_SSH_PUBKEY`         | unset (per-VM ephemeral keys)    | opt-in: inject this host pubkey instead of generating per-VM keys              |
+| `REBUILD=1`             | unset                            | force re-download / bib rebuild                                                 |
+| `TRACE=1`               | unset                            | bash xtrace                                                                     |
+| `NO_COLOR=1`            | unset                            | suppress ANSI colors in log/warn/error                                          |
+| `USE_LIBVIRT_GROUP=1`   | unset (only consumed by setup.sh)| add user to `libvirt` group for `qemu:///system`                                |
+| `VM_PREFLIGHT`          | `fast`                           | dispatcher preflight mode: `fast` (env-only), `full`, `none`                    |
+| `VM_EXPECTED_FEDORA`    | `43`                             | expected `VERSION_ID` for the OS-ID check                                       |
+| `VM_E2E_KINOITE`        | unset                            | opt-in: run the kinoite ShellSpec lane (10–25 min)                              |
+| `VM_E2E_COCKPIT`        | unset                            | opt-in: run the cockpit ShellSpec lane (~150 MB extra packages)                 |
 
 ## Smoke test
 
-`vm/tests/smoke.sh` runs the full lifecycle (create → ssh → snapshot →
-install drift → reset → verify revert → destroy) against `fedora-cloud`
-and asserts no residue is left behind. It always cleans up its test VM
-on exit, even on failure.
+`vm/tests/smoke.sh` is a thin wrapper around [ShellSpec](https://shellspec.info/)
+running the suites under `vm/spec/`. The default lane covers preflight,
+create, cloud-init readiness, internet, ssh + sudo, snapshot, cockpit
+overlay, destroy residue, idempotency, and parallel-safety on
+`fedora-cloud` (~5 min on a warm cache). The kinoite lane is opt-in.
 
 ```bash
-./vm/tests/smoke.sh
+./vm/tests/smoke.sh                                # default lane
+VM_E2E_KINOITE=1 ./vm/tests/smoke.sh               # include kinoite (slow)
+./vm/tests/smoke.sh spec/40_snapshot_reset_spec.sh  # single spec
+./vm/tests/smoke.sh --format tap                   # TAP output for CI
 ```
+
+Install ShellSpec on the host (`rpm-ostree install shellspec` on Fedora,
+or vendor under `vm/.shellspec-vendor/` per <https://shellspec.info/>).
 
 ## Optional: vm/Containerfile
 
