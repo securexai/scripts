@@ -1,0 +1,45 @@
+# Derived bootc OCI for the Fedora 44 Kinoite VM target.
+#
+# Stock fedora-ostree-desktops/kinoite:44 ships without cloud-init, so the
+# per-VM seed ISO (SSH key, hostname, hostkey) wouldn't apply on first boot.
+# This image layers cloud-init on top, then re-commits the bootc container
+# so bib can ingest it cleanly.
+#
+# Parallels vm/Containerfile.bootc which does the same for centos-bootc:
+# stream9. The two coexist; F43 kinoite.env points at the stream9 derivative
+# (R-017 era), F44 kinoite-44.env points at this one.
+#
+# Build (rootful — bib runs rootful and reads from root's libpod store):
+#   sudo podman build -t localhost/scripts-vm-kinoite-44:latest \
+#     -f vm/Containerfile.kinoite-44 vm/
+#
+# Get the local image ID (this is what kinoite-44.env pins as OCI_DIGEST,
+# since bare `localhost/...` refs in bib.sh use the local image ID for
+# cache-validation, not a registry digest):
+#   sudo podman inspect --format '{{.Id}}' localhost/scripts-vm-kinoite-44:latest
+#
+# Then bib the qcow:
+#   BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite --target kinoite-44
+
+# Base pinned by digest (verified 2026-04-29 via Quay v1 tag API,
+# last_modified Wed, 29 Apr 2026 09:46:20 UTC). Re-pin via skopeo inspect
+# when a refresh is intentional.
+FROM quay.io/fedora-ostree-desktops/kinoite:44@sha256:91d44aa9ba8a2fca57f8b02a0d21951ebfa34604fc6b5f1b1a0baf438a889718
+
+RUN dnf -y install cloud-init && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf /tmp/* /var/tmp/*
+
+# Enable cloud-init systemd targets inside the image (bib `latest` no
+# longer accepts `customizations.services` to drive this from the bib
+# config layer). The default systemd preset for cloud-init is `disabled`;
+# flip the four units explicitly.
+RUN systemctl enable cloud-init-local.service \
+                     cloud-init.service \
+                     cloud-config.service \
+                     cloud-final.service
+
+# Smoke-check: ensure the bootc container metadata is intact after the
+# layer. `bootc container lint` is opt-in upstream; ignore failures so
+# older base images don't block the build.
+RUN bootc container lint || true
