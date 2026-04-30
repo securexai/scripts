@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A personal collection of operator scripts for a Fedora 43 host. Currently
-two top-level directories:
+A personal collection of operator scripts for a Fedora 43 or 44 host.
+Currently two top-level directories:
 
 - **`vm/`** — the only substantial subsystem: a libvirt + cloud-init test
   rig with a 11-verb CLI dispatcher, a ShellSpec e2e suite, and a bootc
@@ -164,7 +164,8 @@ and `VM_E2E_KINOITE=1` respectively and stay opt-in.
 
 `vm/DEPLOYMENT.md` is the source of truth for what's verified, what's
 pinned, and the risk register (R-001 through R-019, with R-003
-`BIB_VERSION="latest"`, R-013 session-network setup, and R-019 (Fedora 44
-host bump — F44 went GA 2026-04-28) as the currently-open ones worth
-knowing about). It has its own "How to update this doc" section near
-the bottom.
+`BIB_VERSION="latest"` and R-013 session-network setup as the
+currently-open ones worth knowing about; R-019 (F44 host bump) is in
+progress — F44 host validated, F44 targets added, but `OS_VARIANT` is
+`fedora-unknown` pending osinfo-db). It has its own "How to update this
+doc" section near the bottom.
