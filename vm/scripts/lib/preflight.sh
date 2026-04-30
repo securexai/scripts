@@ -18,12 +18,12 @@ readonly _VM_LIB_PREFLIGHT_LOADED=1
 
 # Pure: parse /etc/os-release for ID and VERSION_ID. Returns 0 if
 # ID=fedora and VERSION_ID matches one of the expected values
-# (whitespace-separated allowlist; default: "43"). Lets a single
-# preflight straddle a Fedora version bump (e.g. "43 44") without
-# branching the codebase. Tracked under R-019.
+# (whitespace-separated allowlist; default: "43 44"). The default was
+# widened to "43 44" on 2026-04-29 once smoke verified the F43 cloud
+# target builds and runs cleanly on an F44 host. R-019.
 # Args: [expected_version_id_allowlist]
 preflight_check_os_id() {
-  local expected="${1:-43}"
+  local expected="${1:-43 44}"
   local os_release="/etc/os-release"
   [[ -r "${os_release}" ]] || { error "no /etc/os-release"; return 1; }
   local id version_id
@@ -122,7 +122,7 @@ preflight_check_toolbox_socket() {
 # Fast path: env-only, no fork/exec. Suitable for the dispatcher to
 # gate every subcommand without measurable latency.
 preflight_fast() {
-  preflight_check_os_id "${VM_EXPECTED_FEDORA:-43}" || die_with "${EXIT_PREREQ}" "preflight_fast: OS check failed"
+  preflight_check_os_id "${VM_EXPECTED_FEDORA:-43 44}" || die_with "${EXIT_PREREQ}" "preflight_fast: OS check failed"
   preflight_check_kvm                                || die_with "${EXIT_PREREQ}" "preflight_fast: KVM check failed"
 }
 
@@ -130,7 +130,7 @@ preflight_fast() {
 # VM_PREFLIGHT=full (debugging) or before destructive operations.
 preflight_full() {
   local rc=0
-  preflight_check_os_id "${VM_EXPECTED_FEDORA:-43}" || rc=1
+  preflight_check_os_id "${VM_EXPECTED_FEDORA:-43 44}" || rc=1
   preflight_check_kvm                               || rc=1
   preflight_check_binaries virsh virt-install qemu-img genisoimage curl sha256sum || rc=1
   preflight_check_virt_host_validate                || rc=1
