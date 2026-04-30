@@ -30,14 +30,14 @@ RUN dnf -y install cloud-init && \
     dnf clean all && \
     rm -rf /var/cache/dnf /tmp/* /var/tmp/*
 
-# Enable cloud-init systemd targets inside the image (bib `latest` no
-# longer accepts `customizations.services` to drive this from the bib
-# config layer). The default systemd preset for cloud-init is `disabled`;
-# flip the four units explicitly.
-RUN systemctl enable cloud-init-local.service \
-                     cloud-init.service \
-                     cloud-config.service \
-                     cloud-final.service
+# Enable cloud-init via its umbrella target rather than the four
+# individual units. cloud-init 25.x renamed cloud-init.service →
+# cloud-init-main.service; enabling the target is durable across that
+# kind of upstream rename and is also what the cloud-init RPM scriptlet
+# itself populates (symlinks under /etc/systemd/system/cloud-init.target.wants/).
+# bib `latest` no longer accepts `customizations.services` to drive this
+# from the bib config layer, so it has to happen here.
+RUN systemctl enable cloud-init.target
 
 # Smoke-check: ensure the bootc container metadata is intact after the
 # layer. `bootc container lint` is opt-in upstream; ignore failures so
