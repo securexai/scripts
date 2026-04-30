@@ -18,9 +18,9 @@ the pending Fedora 44 host bump (F44 went GA 2026-04-28).
 
 **Owner:** [@securexai](https://github.com/securexai)
 
-**Doc version:** 1.7
+**Doc version:** 1.8
 
-**Subsystem SHA:** `main` (HEAD `de0cd05`) — PRs #1 + #2 merged 2026-04-29
+**Subsystem SHA:** `main` (HEAD `35ee4a5`) — PRs #1 + #2 + #3 merged 2026-04-29
 
 ---
 
@@ -59,13 +59,14 @@ setup) are out of scope here. Repo-wide context lives in [`../CLAUDE.md`](../CLA
 
 ## Host Prerequisites
 
-The vm/ workflow targets a Fedora 43 host (Workstation or Kinoite/Silverblue) with KVM. The
-[`setup.sh`](setup.sh) script installs the layered packages and runs the full preflight after
-the binaries land.
+The vm/ workflow targets a Fedora 43 or 44 host (Workstation or Kinoite/Silverblue)
+with KVM. The [`setup.sh`](setup.sh) script installs the layered packages and runs
+the full preflight after the binaries land. `VM_EXPECTED_FEDORA` defaults to the
+allowlist `"43 44"`; widen it (e.g. `"43 44 45"`) to straddle a future bump.
 
 | Requirement                  | Verified by                                                                           |
 | ---------------------------- | ------------------------------------------------------------------------------------- |
-| Fedora 43 (`ID=fedora`)      | [`scripts/lib/preflight.sh`](scripts/lib/preflight.sh) `preflight_check_os_id`         |
+| Fedora 43 or 44 (`ID=fedora`) | [`scripts/lib/preflight.sh`](scripts/lib/preflight.sh) `preflight_check_os_id`        |
 | `/dev/kvm` r/w               | `preflight_check_kvm` (host or `usermod -aG kvm`)                                     |
 | `virt-host-validate qemu`    | `preflight_check_virt_host_validate`                                                  |
 | `virsh -c $LIBVIRT_URI hostname` | `preflight_check_virsh_reachable`                                                  |
@@ -276,7 +277,7 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 | R-016 | low      | tests         | In the full lane, ShellSpec stops reporting examples after `40_snapshot_reset_spec.sh` even though specs 60/70/80 each pass in isolation. Suspect: stderr leak from one spec's evaluation poisons the executor's marker stream for the rest of the run. | Workaround: opt-in specs gated, R-015 wrapper accepts the abort. Real fix is upstream-shellspec instrumentation; defer until specs 60/70/80 stop passing in isolation. | `[~]`  |
 | R-017 | medium   | supply chain  | bib `latest` reports `missing required info: DefaultRootFs` against `quay.io/fedora-ostree-desktops/kinoite:43` and `quay.io/fedora/fedora-bootc:43`. **Reframed 2026-04-29:** this is upstream Fedora bootc policy (per upstream docs: "Some images (like fedora) do not have a default root filesystem type. In this case, you need to add the switch `--rootfs <type>`"). Same policy holds for f44 bases, so this isn't a "wait for upstream" item. | `lib/bib.sh` plumbs a `--rootfs ${BIB_ROOTFS}` flag conditional on the env var being set; targets that need it (kinoite-on-fedora-bootc) export `BIB_ROOTFS="btrfs"` in their env file. The derived-OCI workaround on `centos-bootc:stream9` (which carries `DefaultRootFs`) in `Containerfile.bootc` remains valid as the alternative. | `[~]`  |
 | R-018 | low      | bib           | Rootless bib fails with "Failed to remount /: Permission denied" because rootless `--privileged` doesn't grant CAP_SYS_ADMIN over the parent namespace's mounts. | `BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite` opt-in lands in `6b43b86`; uses `sudo podman` and bind-mounts `/var/lib/containers/storage`. Requires passwordless sudo. | `[x]`  |
-| R-019 | low      | host drift    | Repo is Fedora-43-pinned: `preflight_check_os_id` accepts a single value (`VM_EXPECTED_FEDORA=43`); `targets/*.env` pin F43 image URLs / digests / `OS_VARIANT="fedora43"`; prose mentions "Fedora 43" across `README.md`, `CLAUDE.md`, `setup.sh`. Fedora 44 went GA 2026-04-28 (`kinoite:44` and `fedora-bootc:44` quay tags pushed 2026-04-29). | Two F43-safe prep changes land in this PR: (a) `preflight_check_os_id` accepts a whitespace-separated allowlist so `VM_EXPECTED_FEDORA="43 44"` works; (b) `lib/bib.sh` plumbs `--rootfs` flag (R-017 fix). Image re-pins (`IMAGE_URL`/`IMAGE_SHA256` to F44 CHECKSUM, `OCI_DIGEST` for `kinoite:44`, `OS_VARIANT="fedora44"`) deferred until smoke runs green on a real F44 host. Compat inventory for libvirt/qemu (12.0.0 / 10.2.2 on F44 — minor bump, no breaking changes), cloud-init (25.3 / 26.x — stable surfaces), `rpm-ostree` (still operational on F44; bootc-by-default deferred to F45) recorded under "Change Log 2026-04-29". | `[ ]`  |
+| R-019 | low      | host drift    | Repo was Fedora-43-pinned. F44 went GA 2026-04-28; user upgraded host to F44 Kinoite 2026-04-29. **Resolved on the host side**: smoke-on-F44 ran 27/27 against the F43 cloud target with `VM_EXPECTED_FEDORA="43 44"` (libvirt 12.0.0 + qemu-kvm 10.2.2 on F44 host — no breaking changes). New `fedora-cloud-44` and `kinoite-44` targets added with verified pins (qcow2 SHA256 from signed F44 CHECKSUM; `kinoite:44` and `fedora-bootc:44` digests from Quay v1 API). Default `VM_EXPECTED_FEDORA` widened to `"43 44"`. **Remaining open**: `OS_VARIANT="fedora-unknown"` on both F44 targets — osinfo-db `v20251212` and the F44-shipped osinfo-db RPM do not yet ship a `fedora44` short-id (verified locally via `osinfo-query os \| grep fedora44` — empty). Bump to `"fedora44"` once osinfo-db cuts a release containing `fedora-44.xml.in`. | `[~]`  |
 
 ## What's Next
 
@@ -296,6 +297,27 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
+- **2026-04-29** — `feat/f44-vm-targets` (live verification on F44 host):
+  Host upgraded to **Fedora 44 Kinoite 44.20260428.0** (kernel
+  `6.19.10-300.fc44`, libvirt `12.0.0`, qemu-kvm `10.2.2`). Smoke-on-F44
+  against the existing F43 cloud target ran 27/27, 0 failures, 411 s
+  with `VM_EXPECTED_FEDORA="43 44"` — no code-level breaking changes
+  surfaced from the F43 → F44 host bump. New targets added:
+  `fedora-cloud-44` (Fedora 44 Cloud Base 44-1.7,
+  `IMAGE_SHA256=28680fe5…b7f` from signed CHECKSUM) and `kinoite-44`
+  (derived OCI via new `vm/Containerfile.kinoite-44` layering cloud-init
+  on `quay.io/fedora-ostree-desktops/kinoite:44@sha256:91d44aa9…8718`,
+  `BIB_ROOTFS=btrfs`). Live test: `vm create --target fedora-cloud-44
+  --name probe-44` → kernel 6.19.10, cloud-init 25.3, per-VM ed25519
+  key auth, passwordless sudo all green; destroy clean.
+  `vm/scripts/subcommands/build-kinoite.sh` extended with `--target`
+  flag (default `kinoite`); `vm/scripts/subcommands/create.sh` case
+  statement broadened from exact match to `fedora-cloud*` /
+  `kinoite*` prefix match. Default `VM_EXPECTED_FEDORA` widened from
+  `"43"` to `"43 44"`. R-019 status flipped `[ ]` → `[~]` (host side
+  resolved; `OS_VARIANT="fedora-unknown"` interim until osinfo-db
+  ships fedora44 — verified missing in the current osinfo-db RPM).
+  Doc bumped to v1.8.
 - **2026-04-29** — `main` (post-merge tracking entry, no live re-verification):
   PRs #1 + #2 squash-merged; the vm/ subsystem is now on `main`. Additions
   layered on top of the original PR #1: `vm prune` subcommand + `lib/locks.sh`

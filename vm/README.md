@@ -1,17 +1,19 @@
 # vm/
 
-Spin up real VMs on a Fedora 43 host (Kinoite or Workstation) to test,
-validate, and troubleshoot scripts in this repo. Native libvirt + cloud-init,
-no Vagrant / Packer / Ansible.
+Spin up real VMs on a Fedora 43 or 44 host (Kinoite or Workstation) to
+test, validate, and troubleshoot scripts in this repo. Native libvirt +
+cloud-init, no Vagrant / Packer / Ansible.
 
 > **Deployment status & test coverage:** see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Targets
 
-| Target          | Image acquisition           | Default user | RAM     | Disk  |
-| --------------- | --------------------------- | ------------ | ------- | ----- |
-| `fedora-cloud`  | Fedora 43 Cloud Base qcow2  | `fedora`     | 2 GiB   | 10 G  |
-| `kinoite`       | OCI image → bootc-image-builder → qcow2 | `core` | 4 GiB | 20 G |
+| Target             | Image acquisition                           | Default user | RAM   | Disk |
+| ------------------ | ------------------------------------------- | ------------ | ----- | ---- |
+| `fedora-cloud`     | Fedora 43 Cloud Base qcow2                  | `fedora`     | 2 GiB | 10 G |
+| `fedora-cloud-44`  | Fedora 44 Cloud Base qcow2                  | `fedora`     | 2 GiB | 10 G |
+| `kinoite`          | derived OCI (`Containerfile.bootc` + bib)   | `core`       | 4 GiB | 20 G |
+| `kinoite-44`       | derived OCI (`Containerfile.kinoite-44` + bib) | `core`    | 4 GiB | 20 G |
 
 Defaults live in `vm/targets/<name>.env` and can be overridden per-VM via
 `--cpus / --mem / --disk` flags on `vm create`.
@@ -76,6 +78,26 @@ podman inspect --format '{{.Digest}}' quay.io/fedora-ostree-desktops/kinoite:43
 ./vm/scripts/vm destroy k1
 ```
 
+## Quickstart — `kinoite-44` (Fedora 44 Kinoite)
+
+Stock `quay.io/fedora-ostree-desktops/kinoite:44` ships without cloud-init,
+so the per-VM seed ISO wouldn't apply. We layer cloud-init via a derived
+OCI (`vm/Containerfile.kinoite-44`), then bib that.
+
+```bash
+# One-time per OCI bump: build the derived OCI and pin its local image ID.
+sudo podman build -t localhost/scripts-vm-kinoite-44:latest \
+  -f vm/Containerfile.kinoite-44 vm/
+sudo podman inspect --format '{{.Id}}' localhost/scripts-vm-kinoite-44:latest
+# → paste the sha256:... into vm/targets/kinoite-44.env :: OCI_DIGEST
+
+# Then bib the qcow (slow — 10–25 min, cached) and create:
+BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite --target kinoite-44
+./vm/scripts/vm create --target kinoite-44 --name k44
+./vm/scripts/vm ssh    k44 -- 'rpm-ostree status'
+./vm/scripts/vm destroy k44
+```
+
 ## CLI surface
 
 ```text
@@ -132,7 +154,7 @@ Honored everywhere:
 | `NO_COLOR=1`            | unset                            | suppress ANSI colors in log/warn/error                                          |
 | `USE_LIBVIRT_GROUP=1`   | unset (only consumed by setup.sh)| add user to `libvirt` group for `qemu:///system`                                |
 | `VM_PREFLIGHT`          | `fast`                           | dispatcher preflight mode: `fast` (env-only), `full`, `none`                    |
-| `VM_EXPECTED_FEDORA`    | `43`                             | expected `VERSION_ID` allowlist (whitespace-separated; e.g. `"43 44"`)          |
+| `VM_EXPECTED_FEDORA`    | `43 44`                          | expected `VERSION_ID` allowlist (whitespace-separated; both 43 and 44 default)  |
 | `VM_E2E_KINOITE`        | unset                            | opt-in: run the kinoite ShellSpec lane (10–25 min)                              |
 | `VM_E2E_COCKPIT`        | unset                            | opt-in: run the cockpit ShellSpec lane (~150 MB extra packages)                 |
 | `BIB_ROOTFS`            | unset                            | bib `--rootfs <type>` (e.g. `btrfs`, `xfs`); required for Fedora bootc bases (R-017) |
