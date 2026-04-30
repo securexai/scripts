@@ -79,6 +79,47 @@ vm_undefine() {
   virsh -c "${LIBVIRT_URI}" undefine "${name}" \
     --nvram --snapshots-metadata --checkpoints-metadata \
     >/dev/null 2>&1 || true
+  # virt-install auto-defines a per-disk dir-type storage pool when it
+  # encounters a path that isn't under an existing pool. The seed ISO
+  # lives at ${SEED_DIR}/<name>/seed.iso, so each VM leaks one pool
+  # named after itself. virsh undefine doesn't drop those — clean up
+  # by path match, idempotently.
+  vm_seed_pool_drop_for "${name}"
+}
+
+# Print the <target>/<path> of a libvirt storage pool. Exits 1 if the
+# pool is absent or the dump has no path element. The awk split on
+# `<` and `>` gives field 3 == inner text of the <path> tag.
+vm_pool_path_of() {
+  local name="$1"
+  local xml path
+  xml=$(virsh -c "${LIBVIRT_URI}" pool-dumpxml "${name}" 2>/dev/null) || return 1
+  path=$(awk -F'[<>]' '/<path>/ { print $3; exit }' <<<"${xml}")
+  [[ -n "${path}" ]] || return 1
+  printf '%s' "${path}"
+}
+
+# pool-destroy + pool-undefine for one pool, idempotently.
+# Both commands are best-effort: pool-destroy errors when the pool is
+# already inactive; pool-undefine errors when the pool is gone.
+vm_pool_drop() {
+  local name="$1"
+  virsh -c "${LIBVIRT_URI}" pool-destroy  "${name}" >/dev/null 2>&1 || true
+  virsh -c "${LIBVIRT_URI}" pool-undefine "${name}" >/dev/null 2>&1 || true
+}
+
+# Drop any dir-type pool whose <path> is exactly ${SEED_DIR}/<name>.
+# Used by vm_undefine; safe to call when no such pool exists.
+vm_seed_pool_drop_for() {
+  local name="$1"
+  local target="${SEED_DIR}/${name}"
+  local p path
+  while IFS= read -r p; do
+    [[ -z "${p}" ]] && continue
+    path=$(vm_pool_path_of "${p}") || continue
+    [[ "${path}" == "${target}" ]] || continue
+    vm_pool_drop "${p}"
+  done < <(virsh -c "${LIBVIRT_URI}" pool-list --all --name 2>/dev/null | awk 'NF')
 }
 
 vm_snapshot() {

@@ -39,6 +39,20 @@ Describe 'vm destroy — residue'
     The path "${STATE}/seeds/${VM_NAME}.lock" should not be exist
   End
 
+  It 'auto-defined seed storage pool is undefined'
+    # virt-install auto-creates a dir-type pool whose <path> matches
+    # ${STATE}/seeds/${VM_NAME}. vm destroy must clean it up — otherwise
+    # `virsh pool-list` accumulates one entry per VM created.
+    pool_paths=$(
+      for p in $(virsh -c "${LIBVIRT_DEFAULT_URI}" pool-list --all --name 2>/dev/null); do
+        [[ -z "${p}" ]] && continue
+        virsh -c "${LIBVIRT_DEFAULT_URI}" pool-dumpxml "${p}" 2>/dev/null \
+          | awk -F'[<>]' '/<path>/ { print $3; exit }'
+      done
+    )
+    The variable pool_paths should not include "${STATE}/seeds/${VM_NAME}"
+  End
+
   It 'base image cache is preserved (not wiped on destroy)'
     cache_after=$(find "${CACHE}" -maxdepth 1 -type f -name '*.qcow2' 2>/dev/null | sort)
     When call test "${cache_after}" = "${cache_before}"
