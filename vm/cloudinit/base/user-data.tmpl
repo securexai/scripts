@@ -6,13 +6,16 @@ ssh_pwauth: false
 disable_root: true
 
 # Inject the per-VM key into the named target user (set in
-# vm/targets/<target>.env via DEFAULT_USER) plus the cloud-init default
-# user. This covers two cases: Fedora Cloud, where the default user is
-# fedora and our DEFAULT_USER matches; and bootc-derived images, where
-# the user is created during the bib build (e.g. core) and cloud-init's
-# notion of "default user" differs from the image's actual login user.
+# vm/targets/<target>.env via DEFAULT_USER). On Fedora Cloud Base this
+# operates on the pre-existing `fedora` user (idempotent modify); on
+# bootc-derived images it operates on the user created at bib time
+# (e.g. `core` from kinoite.toml's [[customizations.user]] block).
+#
+# We do NOT include cloud-init's `- default` user. On Fedora Kinoite,
+# `default` resolves to `fedora` with default groups `[adm,
+# systemd-journal, wheel]` — `adm` and `systemd-journal` don't exist
+# in stock Kinoite, so useradd fails and aborts the users module.
 users:
-  - default
   - name: ${DEFAULT_USER}
     sudo: ALL=(ALL) NOPASSWD:ALL
     groups: [wheel]

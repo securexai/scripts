@@ -50,8 +50,8 @@ build_kinoite_qcow() {
   local config_override="${2:-}"
   [[ -r "${target_env}" ]] || die_with "${EXIT_USAGE}" "target env not readable: ${target_env}"
 
-  local oci_ref oci_digest bib_version bib_config_rel
-  read -r oci_ref oci_digest bib_version bib_config_rel < <(
+  local oci_ref oci_digest bib_version bib_config_rel bib_rootfs
+  read -r oci_ref oci_digest bib_version bib_config_rel bib_rootfs < <(
     set -o errexit -o nounset
     # shellcheck disable=SC1090
     . "${target_env}"
@@ -59,7 +59,10 @@ build_kinoite_qcow() {
     [[ -n "${OCI_DIGEST:-}" ]]     || { echo "MISSING_OCI_DIGEST" >&2; exit 1; }
     [[ -n "${BIB_VERSION:-}" ]]    || { echo "MISSING_BIB_VERSION" >&2; exit 1; }
     [[ -n "${BIB_CONFIG_REL:-}" ]] || { echo "MISSING_BIB_CONFIG_REL" >&2; exit 1; }
-    printf '%s %s %s %s\n' "${OCI_REF}" "${OCI_DIGEST}" "${BIB_VERSION}" "${BIB_CONFIG_REL}"
+    # BIB_ROOTFS is optional (only needed for Fedora bootc bases that
+    # don't declare a DefaultRootFs). Use '-' as a sentinel when unset
+    # so `read -r` always parses 5 fields cleanly.
+    printf '%s %s %s %s %s\n' "${OCI_REF}" "${OCI_DIGEST}" "${BIB_VERSION}" "${BIB_CONFIG_REL}" "${BIB_ROOTFS:--}"
   )
 
   [[ -n "${oci_ref}" && -n "${oci_digest}" && -n "${bib_version}" && -n "${bib_config_rel}" ]] \
@@ -140,8 +143,8 @@ build_kinoite_qcow() {
   # does carry the metadata so this stays unset for it. Documented
   # under R-017 in vm/DEPLOYMENT.md.
   local rootfs_flag=()
-  if [[ -n "${BIB_ROOTFS:-}" ]]; then
-    rootfs_flag+=(--rootfs "${BIB_ROOTFS}")
+  if [[ -n "${bib_rootfs}" && "${bib_rootfs}" != "-" ]]; then
+    rootfs_flag+=(--rootfs "${bib_rootfs}")
   fi
 
   log "running bootc-image-builder ${bib_version}"
