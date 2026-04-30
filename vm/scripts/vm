@@ -36,7 +36,7 @@ Env overrides honored everywhere:
   TRACE=1                        bash xtrace
   NO_COLOR=1                     suppress color
   VM_PREFLIGHT=fast|full|none    preflight mode (default: fast)
-  VM_EXPECTED_FEDORA             expected Fedora VERSION_ID (default: 43)
+  VM_EXPECTED_FEDORA             expected Fedora VERSION_ID allowlist (default: "43 44")
 EOF
 }
 

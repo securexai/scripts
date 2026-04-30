@@ -10,7 +10,7 @@ Describe 'preflight'
 
   Describe 'preflight_check_os_id (pure)'
     It 'accepts the host when ID=fedora and VERSION_ID matches'
-      When call preflight_check_os_id "${VM_EXPECTED_FEDORA:-43}"
+      When call preflight_check_os_id "${VM_EXPECTED_FEDORA:-43 44}"
       The status should be success
     End
 
@@ -21,7 +21,11 @@ Describe 'preflight'
     End
 
     It 'accepts a whitespace-separated allowlist (R-019 straddle)'
-      When call preflight_check_os_id "${VM_EXPECTED_FEDORA:-43} 999"
+      # Build an allowlist containing the actual host VERSION_ID plus a
+      # bogus 999 — proves the predicate scans the list and accepts on
+      # any one match, regardless of which Fedora the host is running.
+      host_v=$(awk -F= '$1=="VERSION_ID"{gsub(/"/,"",$2);print $2;exit}' /etc/os-release)
+      When call preflight_check_os_id "${host_v} 999"
       The status should be success
     End
   End
