@@ -20,7 +20,9 @@ readonly _BK_VM_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 target="kinoite"
 while (( $# > 0 )); do
   case "$1" in
-    --target)   target="$2"; shift 2;;
+    --target)
+      [[ -n "${2:-}" ]] || die_with "${EXIT_USAGE}" "--target requires a value"
+      target="$2"; shift 2;;
     -h|--help)
       cat <<'EOF' >&2
 usage: vm build-kinoite [--target <name>]
