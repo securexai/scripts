@@ -45,6 +45,21 @@ _resolve_podman() {
   die "no usable podman: install on host (rpm-ostree install podman) or run from a context that exposes flatpak-spawn"
 }
 
+# Per-target qcow2 cache subdir. Derived from the target env's
+# basename plus the optional config-override basename so two
+# different kinoite-class targets — or two cockpit/non-cockpit
+# variants of the same target — don't clobber each other.
+_bib_out_subdir() {
+  local target_env="$1" config_override="${2:-}"
+  local target_basename="${target_env##*/}"
+  target_basename="${target_basename%.env}"
+  local out_subdir="${target_basename}-out"
+  if [[ -n "${config_override}" ]]; then
+    out_subdir+="-${config_override%.toml}"
+  fi
+  printf '%s' "${out_subdir}"
+}
+
 build_kinoite_qcow() {
   local target_env="$1"
   local config_override="${2:-}"
@@ -82,16 +97,8 @@ build_kinoite_qcow() {
   local bib_config="${_BIB_VM_ROOT}/targets/${effective_config_rel}"
   [[ -r "${bib_config}" ]] || die_with "${EXIT_USAGE}" "bib config not found: ${bib_config}"
 
-  # Output cache is keyed on the target env's basename and (optionally)
-  # on the config override's basename — so kinoite vs kinoite-44, and a
-  # base build vs a kinoite-cockpit build of the same target, each get
-  # their own qcow2 instead of clobbering each other.
-  local target_basename="${target_env##*/}"
-  target_basename="${target_basename%.env}"
-  local out_subdir="${target_basename}-out"
-  if [[ -n "${config_override}" ]]; then
-    out_subdir="${target_basename}-out-${config_override%.toml}"
-  fi
+  local out_subdir
+  out_subdir=$(_bib_out_subdir "${target_env}" "${config_override}")
   local out_dir="${IMAGE_CACHE_DIR}/${out_subdir}"
   mkdir -p "${out_dir}"
 
