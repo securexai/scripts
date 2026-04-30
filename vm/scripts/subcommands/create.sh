@@ -24,7 +24,10 @@ readonly TARGETS_DIR="${_CREATE_VM_ROOT}/targets"
 
 usage() {
   cat <<'EOF' >&2
-usage: vm create --target {fedora-cloud|kinoite} --name <vm-name> [options]
+usage: vm create --target <name> --name <vm-name> [options]
+       targets: fedora-cloud, fedora-cloud-44, kinoite, kinoite-44
+                (any name matching fedora-cloud* or kinoite* with a matching
+                 vm/targets/<name>.env is recognized)
   --persistent     accepted for forward compat (no-op — all VMs persist
                    until 'vm destroy' is called)
   --cpus N         override target default
@@ -69,13 +72,16 @@ done
 if [[ -n "${overlay}" ]] && (( with_cockpit )); then
   die_with "${EXIT_USAGE}" "--overlay and --with-cockpit cannot be combined (yet)"
 fi
-if (( with_cockpit )) && [[ "${target}" != "fedora-cloud" && "${target}" != "kinoite" ]]; then
-  die_with "${EXIT_USAGE}" "--with-cockpit only supports fedora-cloud and kinoite (got: ${target})"
+if (( with_cockpit )); then
+  case "${target}" in
+    fedora-cloud|fedora-cloud-*|kinoite|kinoite-*) ;;
+    *) die_with "${EXIT_USAGE}" "--with-cockpit only supports fedora-cloud* and kinoite* targets (got: ${target})" ;;
+  esac
 fi
-# For fedora-cloud, cockpit ships via cloud-init overlay. For kinoite,
-# cockpit ships baked into the bib qcow2 (kinoite-cockpit.toml) — no
-# overlay needed.
-if (( with_cockpit )) && [[ "${target}" == "fedora-cloud" ]]; then
+# For fedora-cloud-class targets, cockpit ships via cloud-init overlay.
+# For kinoite-class, cockpit ships baked into the bib qcow2
+# (kinoite-cockpit.toml) — no overlay needed.
+if (( with_cockpit )) && [[ "${target}" == fedora-cloud* ]]; then
   overlay="cockpit"
 fi
 
@@ -95,10 +101,10 @@ disk_gib="${disk:-${DEFAULT_DISK_GIB}}"
 
 # Acquire base image.
 case "${target}" in
-  fedora-cloud)
+  fedora-cloud|fedora-cloud-*)
     base=$(ensure_image "${target_env}")
     ;;
-  kinoite)
+  kinoite|kinoite-*)
     # shellcheck source=../lib/bib.sh
     . "${SCRIPT_DIR}/../lib/bib.sh"
     if (( with_cockpit )); then
