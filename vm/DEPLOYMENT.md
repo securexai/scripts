@@ -297,26 +297,53 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 
 ## Change Log
 
-- **2026-04-29** — `feat/f44-vm-targets` (live verification on F44 host):
+- **2026-04-29** — `feat/f44-vm-targets` (live verification on F44 host,
+  both new targets deployed end-to-end):
   Host upgraded to **Fedora 44 Kinoite 44.20260428.0** (kernel
   `6.19.10-300.fc44`, libvirt `12.0.0`, qemu-kvm `10.2.2`). Smoke-on-F44
   against the existing F43 cloud target ran 27/27, 0 failures, 411 s
   with `VM_EXPECTED_FEDORA="43 44"` — no code-level breaking changes
-  surfaced from the F43 → F44 host bump. New targets added:
-  `fedora-cloud-44` (Fedora 44 Cloud Base 44-1.7,
-  `IMAGE_SHA256=28680fe5…b7f` from signed CHECKSUM) and `kinoite-44`
-  (derived OCI via new `vm/Containerfile.kinoite-44` layering cloud-init
-  on `quay.io/fedora-ostree-desktops/kinoite:44@sha256:91d44aa9…8718`,
-  `BIB_ROOTFS=btrfs`). Live test: `vm create --target fedora-cloud-44
-  --name probe-44` → kernel 6.19.10, cloud-init 25.3, per-VM ed25519
-  key auth, passwordless sudo all green; destroy clean.
-  `vm/scripts/subcommands/build-kinoite.sh` extended with `--target`
-  flag (default `kinoite`); `vm/scripts/subcommands/create.sh` case
-  statement broadened from exact match to `fedora-cloud*` /
-  `kinoite*` prefix match. Default `VM_EXPECTED_FEDORA` widened from
-  `"43"` to `"43 44"`. R-019 status flipped `[ ]` → `[~]` (host side
-  resolved; `OS_VARIANT="fedora-unknown"` interim until osinfo-db
-  ships fedora44 — verified missing in the current osinfo-db RPM).
+  surfaced from the F43 → F44 host bump.
+
+  **`fedora-cloud-44` deployed**: `IMAGE_SHA256=28680fe5…b7f` (Fedora 44
+  Cloud Base 44-1.7 from signed CHECKSUM). `vm create --target
+  fedora-cloud-44 --name probe-44` → kernel 6.19.10, cloud-init 25.3,
+  per-VM ed25519 key auth, passwordless sudo all green; destroy clean.
+
+  **`kinoite-44` deployed** via new `vm/Containerfile.kinoite-44`
+  layering cloud-init on
+  `quay.io/fedora-ostree-desktops/kinoite:44@sha256:91d44aa9…8718`,
+  `BIB_ROOTFS=btrfs`. Four fixes surfaced during the actual deploy:
+  (a) `lib/bib.sh` was silently dropping `BIB_ROOTFS` at the env-file
+  hand-off subshell — threaded it through with a `-` sentinel for the
+  empty case. (b) cloud-init 25.x renamed `cloud-init.service` →
+  `cloud-init-main.service`; switched the Containerfile to enable
+  `cloud-init.target` (durable across renames). (c) `cloudinit/base/
+  user-data.tmpl` had `users: [- default, ...]` which on F44 Kinoite
+  expanded to `fedora` with default groups `[adm, systemd-journal,
+  wheel]` — those two groups don't exist on stock Kinoite, useradd
+  failed, cascading into `cloud-init status: error`. Dropped the
+  `- default` entry; the explicit `name: ${DEFAULT_USER}` second
+  entry covers both bases (Fedora Cloud `fedora` and bib-time `core`).
+  (d) Pinned `kinoite-44.env` `OCI_DIGEST` to local image ID
+  (`sha256:63b3fce4…ffe5`) after first successful build.
+
+  After fixes: `vm create --target kinoite-44 --name probe-k44` →
+  SSH ready as `core`, kernel 6.19.14-300.fc44, Fedora Linux 44
+  (Kinoite), `cloud-init status: done, errors: []`, passwordless
+  sudo OK; destroy clean. Smoke 27/27 unaffected by the
+  user-data.tmpl `- default` removal.
+
+  **Dispatcher and preflight**: `vm/scripts/subcommands/build-kinoite.sh`
+  extended with `--target` flag (default `kinoite`);
+  `vm/scripts/subcommands/create.sh` case statement broadened from
+  exact match to `fedora-cloud*` / `kinoite*` prefix match. Default
+  `VM_EXPECTED_FEDORA` widened from `"43"` to `"43 44"`.
+
+  R-019 status flipped `[ ]` → `[~]`. Host side fully resolved (both
+  F44 targets deployed and verified). Remaining open:
+  `OS_VARIANT="fedora-unknown"` interim until osinfo-db ships
+  `fedora44` (verified missing in the F44-shipped osinfo-db RPM).
   Doc bumped to v1.8.
 - **2026-04-29** — `main` (post-merge tracking entry, no live re-verification):
   PRs #1 + #2 squash-merged; the vm/ subsystem is now on `main`. Additions
