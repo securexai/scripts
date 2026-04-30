@@ -63,6 +63,17 @@ for l in "${locks[@]}"; do
   n="${l##*/}"; n="${n%.lock}"
   [[ -z "${live_vms[${n}]:-}" ]] && plan+=( "lock|${l}" )
 done
+# Pool sweep: any dir-type pool whose <path> is a *direct child* of
+# ${SEED_DIR} and is not owned by a live domain is a virt-install leak.
+# Path is the source of truth — pool name is just a label virt-install
+# happens to set to the VM name.
+while IFS= read -r p; do
+  [[ -z "${p}" ]] && continue
+  path=$(vm_pool_path_of "${p}") || continue
+  [[ "${path}" == "${SEED_DIR}/"*  &&  "${path#"${SEED_DIR}/"}" != */* ]] || continue
+  n="${path##*/}"
+  [[ -z "${live_vms[${n}]:-}" ]] && plan+=( "pool|${p}|${path}" )
+done < <(virsh -c "${LIBVIRT_URI}" pool-list --all --name 2>/dev/null | awk 'NF')
 # Trailing `:` keeps $? = 0 if the last loop's final `&&` short-circuited
 # false — otherwise errexit would treat the orphan-free case as a fault.
 :
@@ -76,7 +87,18 @@ removed=0
 held_locks=()
 for entry in "${plan[@]}"; do
   kind="${entry%%|*}"
-  path="${entry#*|}"
+  rest="${entry#*|}"
+  # disk/seed/lock entries are 2-field (kind|path); pool is
+  # 3-field (kind|pool-name|pool-path) so the dry-run message can
+  # name what's actually visible in `virsh pool-list`.
+  if [[ "${kind}" == "pool" ]]; then
+    pool_name="${rest%%|*}"
+    path="${rest#*|}"
+    label="${pool_name}"
+  else
+    path="${rest}"
+    label="${path}"
+  fi
 
   if [[ "${kind}" == "lock" ]]; then
     name="${path##*/}"; name="${name%.lock}"
@@ -87,14 +109,15 @@ for entry in "${plan[@]}"; do
   fi
 
   if (( apply )); then
-    (( quiet )) || log "removing ${kind}: ${path}"
+    (( quiet )) || log "removing ${kind}: ${label}"
     case "${kind}" in
       disk) rm -f  "${path}";;
       seed) rm -rf "${path}";;
       lock) vm_lock_release_and_unlink "${name}";;
+      pool) vm_pool_drop "${pool_name}";;
     esac
   else
-    (( quiet )) || log "would remove ${kind}: ${path}"
+    (( quiet )) || log "would remove ${kind}: ${label}"
     [[ "${kind}" == "lock" ]] && vm_lock_release
   fi
   (( removed++ )) || true
