@@ -78,15 +78,19 @@ build_kinoite_qcow() {
       die_with "${EXIT_USAGE}" "OCI_REF must not include a transport prefix (got: ${oci_ref}) — use a bare 'localhost/<name>:<tag>' or 'registry/<name>:<tag>' form" ;;
   esac
 
-  # Override config (e.g. kinoite-cockpit.toml) keeps a separate output
-  # cache so a base build and a cockpit build don't clobber each other.
   local effective_config_rel="${config_override:-${bib_config_rel}}"
   local bib_config="${_BIB_VM_ROOT}/targets/${effective_config_rel}"
   [[ -r "${bib_config}" ]] || die_with "${EXIT_USAGE}" "bib config not found: ${bib_config}"
 
-  local out_subdir="kinoite-out"
+  # Output cache is keyed on the target env's basename and (optionally)
+  # on the config override's basename — so kinoite vs kinoite-44, and a
+  # base build vs a kinoite-cockpit build of the same target, each get
+  # their own qcow2 instead of clobbering each other.
+  local target_basename="${target_env##*/}"
+  target_basename="${target_basename%.env}"
+  local out_subdir="${target_basename}-out"
   if [[ -n "${config_override}" ]]; then
-    out_subdir="kinoite-out-${config_override%.toml}"
+    out_subdir="${target_basename}-out-${config_override%.toml}"
   fi
   local out_dir="${IMAGE_CACHE_DIR}/${out_subdir}"
   mkdir -p "${out_dir}"
