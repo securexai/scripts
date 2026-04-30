@@ -17,6 +17,9 @@ Describe 'kinoite (opt-in)'
   BeforeAll 'setup'
   AfterAll  'cleanup'
 
+  # Hardcoded "kinoite-out" matches the default --target kinoite (see
+  # bib.sh::_bib_out_subdir). If this spec ever runs against a different
+  # kinoite-class target, derive the path the same way bib.sh does.
   It 'bib produces a qcow2 in the cache'
     cache="${XDG_CACHE_HOME:-${HOME}/.cache}/scripts-vm/images/kinoite-out/qcow2/disk.qcow2"
     The path "${cache}" should be exist
