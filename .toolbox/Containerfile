@@ -32,7 +32,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 # uv: install system-wide to /usr/local/bin so every toolbox user shares the
 # same binary. Per-user tool installs still land under $HOME (uv default).
-ARG UV_VERSION=0.11.7
+ARG UV_VERSION=0.11.8
 RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" \
       | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
  && /usr/local/bin/uv --version
