@@ -65,21 +65,24 @@ RUN set -eu; \
     /usr/local/bin/betterleaks version 2>/dev/null \
       || /usr/local/bin/betterleaks --version
 
-# pnpm: pinned static binary from the upstream GitHub release (Fedora's
+# pnpm: pinned binary from the upstream GitHub release tarball (pnpm 11+
+# ships pnpm-linux-x64.tar.gz instead of a flat static binary; the root
+# `pnpm` entry in the tarball is a self-contained ELF binary). Fedora's
 # nodejs package strips out corepack, so the usual `corepack enable` route
-# is unavailable). Mirrors the betterleaks pattern: version + sha256 pinned,
-# build fails fast if upstream rotates the asset. amd64-only.
+# is unavailable. Version + sha256 pinned; build fails fast on mismatch.
+# amd64-only.
 #
 # Global pnpm installs go straight to /usr/local/bin via --global-bin-dir
 # (already on PATH, satisfies pnpm's safety check); --global-dir holds the
 # package store under /opt so user $HOME stays untouched.
-ARG PNPM_VERSION=10.33.1
-ARG PNPM_SHA256=01994535f706e945f44646eb57c1c81bd42231739256809a1e6490332cd6c23e
+ARG PNPM_VERSION=11.0.3
+ARG PNPM_SHA256=5c236f22568453e76f05c2c0a37b483d326ddb3c7759f3b7a7f13a8860109771
 RUN set -eu; \
-    url="https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linuxstatic-x64"; \
+    url="https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-x64.tar.gz"; \
     tmp="$(mktemp -d)"; \
-    curl -fsSL -o "${tmp}/pnpm" "${url}"; \
-    echo "${PNPM_SHA256}  ${tmp}/pnpm" | sha256sum -c -; \
+    curl -fsSL -o "${tmp}/pnpm.tar.gz" "${url}"; \
+    echo "${PNPM_SHA256}  ${tmp}/pnpm.tar.gz" | sha256sum -c -; \
+    tar -xzf "${tmp}/pnpm.tar.gz" -C "${tmp}" ./pnpm; \
     install -m 0755 "${tmp}/pnpm" /usr/local/bin/pnpm; \
     rm -rf "${tmp}"; \
     mkdir -p /opt/pnpm-global; \
