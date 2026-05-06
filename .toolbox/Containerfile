@@ -27,12 +27,13 @@ RUN dnf install -y --setopt=install_weak_deps=False \
       ca-certificates \
       jq \
       ripgrep \
+      libatomic \
  && dnf clean all \
  && rm -rf /var/cache/dnf
 
 # uv: install system-wide to /usr/local/bin so every toolbox user shares the
 # same binary. Per-user tool installs still land under $HOME (uv default).
-ARG UV_VERSION=0.11.7
+ARG UV_VERSION=0.11.8
 RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" \
       | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh \
  && /usr/local/bin/uv --version
@@ -65,22 +66,28 @@ RUN set -eu; \
     /usr/local/bin/betterleaks version 2>/dev/null \
       || /usr/local/bin/betterleaks --version
 
-# pnpm: pinned static binary from the upstream GitHub release (Fedora's
-# nodejs package strips out corepack, so the usual `corepack enable` route
-# is unavailable). Mirrors the betterleaks pattern: version + sha256 pinned,
-# build fails fast if upstream rotates the asset. amd64-only.
+# pnpm: pinned binary from the upstream GitHub release tarball. pnpm 11+
+# ships pnpm-linux-x64.tar.gz containing a `pnpm` launcher (embedded
+# Node.js runtime, ~124 MB ELF) plus a sibling `dist/` tree with the
+# JS sources the launcher loads at runtime. The launcher requires
+# `dist/pnpm.mjs` next to it, so we extract the whole tarball to
+# /opt/pnpm and symlink the launcher onto PATH. Fedora's nodejs
+# package strips out corepack, so `corepack enable` isn't an option.
+# Version + sha256 pinned; build fails fast on mismatch. amd64-only.
 #
 # Global pnpm installs go straight to /usr/local/bin via --global-bin-dir
 # (already on PATH, satisfies pnpm's safety check); --global-dir holds the
 # package store under /opt so user $HOME stays untouched.
-ARG PNPM_VERSION=10.33.1
-ARG PNPM_SHA256=01994535f706e945f44646eb57c1c81bd42231739256809a1e6490332cd6c23e
+ARG PNPM_VERSION=11.0.3
+ARG PNPM_SHA256=5c236f22568453e76f05c2c0a37b483d326ddb3c7759f3b7a7f13a8860109771
 RUN set -eu; \
-    url="https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linuxstatic-x64"; \
+    url="https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-x64.tar.gz"; \
     tmp="$(mktemp -d)"; \
-    curl -fsSL -o "${tmp}/pnpm" "${url}"; \
-    echo "${PNPM_SHA256}  ${tmp}/pnpm" | sha256sum -c -; \
-    install -m 0755 "${tmp}/pnpm" /usr/local/bin/pnpm; \
+    curl -fsSL -o "${tmp}/pnpm.tar.gz" "${url}"; \
+    echo "${PNPM_SHA256}  ${tmp}/pnpm.tar.gz" | sha256sum -c -; \
+    mkdir -p /opt/pnpm; \
+    tar -xzf "${tmp}/pnpm.tar.gz" -C /opt/pnpm; \
+    ln -s /opt/pnpm/pnpm /usr/local/bin/pnpm; \
     rm -rf "${tmp}"; \
     mkdir -p /opt/pnpm-global; \
     pnpm --version; \
