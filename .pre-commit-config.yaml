@@ -1,0 +1,87 @@
+# .pre-commit-config.yaml — repo-bootstrap baseline
+#
+# Materialized by ~/.claude/skills/repo-bootstrap/. Mirrors the rules
+# declared in the global CLAUDE.md.
+#
+# Install hooks (once per clone):
+#   pre-commit install --install-hooks --hook-type commit-msg --hook-type pre-push
+# Audit the worktree:
+#   pre-commit run --all-files
+# Bump pinned revisions:
+#   pre-commit autoupdate
+
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+
+repos:
+  # ---------------------------------------------------------------------------
+  # Baseline hygiene
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: check-added-large-files
+        args: [--maxkb=10240]
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args:
+          - --branch=main
+          - --branch=master
+          - --branch=develop
+          - --pattern=^release/.*
+
+  # ---------------------------------------------------------------------------
+  # Secret detection — betterleaks (upstream hosted hook).
+  # The hook entry is fixed by upstream as
+  #   betterleaks git --pre-commit --redact --staged --verbose
+  # so do NOT override `args` here. Config lives in .betterleaks.toml.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: v1.1.2
+    hooks:
+      - id: betterleaks
+
+  # ---------------------------------------------------------------------------
+  # Conventional Commits — commitlint (commit-msg stage).
+  # Isolated node env via additional_dependencies — no global install needed.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.22.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies:
+          - '@commitlint/cli@19.5.0'
+          - '@commitlint/config-conventional@19.5.0'
+
+  # ---------------------------------------------------------------------------
+  # Shell linting
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        # severity=error so the bootstrap doesn't gate on pre-existing
+        # SC2155-style warnings; bump back to "warning" once the cleanup
+        # follow-up lands.
+        args: [--severity=error]
+
+  # ---------------------------------------------------------------------------
+  # Markdown linting
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.18.1
+    hooks:
+      - id: markdownlint-cli2

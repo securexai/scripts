@@ -1,0 +1,78 @@
+# .betterleaks.toml — repo-bootstrap baseline
+#
+# Extends the default betterleaks ruleset with cloud + IaC patterns and a
+# sensible allowlist for test fixtures. Same TOML schema as the gitleaks
+# fork; per-line bypass marker is `# betterleaks:allow`.
+
+title = "Repo betterleaks config"
+
+[extend]
+useDefault = true
+
+# -----------------------------------------------------------------------------
+# Additional rules — Azure, Terraform state, MikroTik exports, kubeconfig
+# -----------------------------------------------------------------------------
+
+[[rules]]
+id = "azure-storage-connection-string"
+description = "Azure Storage connection string"
+regex = '''DefaultEndpointsProtocol=https?;AccountName=[A-Za-z0-9]+;AccountKey=[A-Za-z0-9+/=]{88}'''
+tags = ["azure", "storage", "connection-string"]
+
+[[rules]]
+id = "azure-sas-token"
+description = "Azure Shared Access Signature token"
+regex = '''sv=20[0-9]{2}-[0-9]{2}-[0-9]{2}&s[rs]=[a-z]+&s[ip]=[^&\s]+&se=[^&\s]+&sp=[a-z]+&sig=[A-Za-z0-9%]+'''
+tags = ["azure", "sas"]
+
+[[rules]]
+id = "azure-ad-client-secret"
+description = "Azure AD application client secret (value form)"
+regex = '''[A-Za-z0-9~._\-]{34,40}'''
+path = '''(?i)(client[_-]?secret|azure[_-]?client[_-]?secret)'''
+tags = ["azure", "aad"]
+
+[[rules]]
+id = "terraform-state-secret"
+description = "Secrets leaking from terraform.tfstate"
+regex = '''"(value|secret|password|api_key|access_key)"\s*:\s*"[^"]{12,}"'''
+path = '''\.tfstate(\.backup)?$'''
+tags = ["terraform", "state"]
+
+[[rules]]
+id = "mikrotik-routeros-password"
+description = "Exported MikroTik RouterOS config password"
+regex = '''password=("[^"]+"|[^\s]+)'''
+path = '''\.rsc$'''
+tags = ["mikrotik", "routeros"]
+
+[[rules]]
+id = "kubeconfig-client-key-data"
+description = "kubeconfig embedded client key"
+regex = '''client-key-data:\s*[A-Za-z0-9+/=]{100,}'''
+tags = ["kubernetes", "kubeconfig"]
+
+# -----------------------------------------------------------------------------
+# Allowlist — known non-secrets
+# -----------------------------------------------------------------------------
+
+[allowlist]
+description = "Common non-secrets and test fixtures"
+paths = [
+    '''(^|/)node_modules/''',
+    '''(^|/)dist/''',
+    '''(^|/)build/''',
+    '''(^|/)\.terraform/''',
+    '''(^|/)tests?/fixtures/''',
+    '''(^|/)__fixtures__/''',
+    '''\.lock$''',
+]
+regexes = [
+    '''AKIAIOSFODNN7EXAMPLE''',
+    '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',
+    '''00000000-0000-0000-0000-000000000000''',
+    '''11111111-1111-1111-1111-111111111111''',
+    '''-----BEGIN PUBLIC KEY-----''',
+    '''-----BEGIN CERTIFICATE-----''',
+    '''-----BEGIN OPENSSH PUBLIC KEY-----''',
+]
