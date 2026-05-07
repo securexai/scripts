@@ -7,7 +7,7 @@
 # https://mise.jdx.dev/configuration.html
 
 [tools]
-node = "latest"
+node = "22"
 shellcheck = "0.10.0"
 shfmt = "3.7.0"
 

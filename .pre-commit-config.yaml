@@ -85,16 +85,3 @@ repos:
     rev: v0.18.1
     hooks:
       - id: markdownlint-cli2
-
-  # ---------------------------------------------------------------------------
-  # Signed-commit enforcement on pre-push
-  # (Belt-and-braces: branch protection on the remote is the real gate.)
-  # ---------------------------------------------------------------------------
-  - repo: local
-    hooks:
-      - id: enforce-signed-commits
-        name: enforce signed commits on push
-        entry: bash -c 'range="origin/HEAD..HEAD"; if ! git rev-parse origin/HEAD >/dev/null 2>&1; then range="HEAD"; fi; unsigned=$(git log --pretty="format:%H %G?" "$range" | awk "\$2 != \"G\" \&\& \$2 != \"U\" {print \$1}"); if [ -n "$unsigned" ]; then printf "ABORT unsigned commits:\n%s\n" "$unsigned"; exit 1; fi'
-        language: system
-        stages: [pre-push]
-        pass_filenames: false

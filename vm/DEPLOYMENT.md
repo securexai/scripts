@@ -285,7 +285,7 @@ Expected: empty (no overlay disks or seed dirs left after the suite tears down).
 ## What's Next
 
 - **F44 host bump (R-019).** Two F43-safe prep changes land in this PR (preflight allowlist
-  - `bib.sh --rootfs` plumbing). When a real F44 host is available, run the standard smoke
+  and `bib.sh --rootfs` plumbing). When a real F44 host is available, run the standard smoke
   lane, then re-pin `IMAGE_SHA256` from the F44 CHECKSUM, `OCI_DIGEST` for `kinoite:44`,
   and bump `OS_VARIANT` to `fedora44`. Verify the toolbx socket bridge
   (`/run/user/$UID/libvirt/virtqemud-sock`) behaves identically.
