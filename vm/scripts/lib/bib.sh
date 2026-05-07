@@ -159,6 +159,9 @@ build_kinoite_qcow() {
   fi
 
   log "running bootc-image-builder ${bib_version}"
+  # bib emits its manifest/build progress on stdout; redirect to stderr
+  # so it stays visible to the user without polluting the function's
+  # stdout (which the caller captures as the qcow2 path).
   # shellcheck disable=SC2086
   ${_PODMAN} run --rm --privileged --security-opt label=disable \
     "${store_mount[@]}" \
@@ -168,7 +171,7 @@ build_kinoite_qcow() {
     --type qcow2 \
     --config /config.toml \
     "${rootfs_flag[@]}" \
-    "${bib_ref}"
+    "${bib_ref}" >&2
 
   # Rootful bib writes /output as uid 0 on the host. Reclaim ownership
   # so libvirt's session URI can read the qcow2 without escalation.
