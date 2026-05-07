@@ -17,8 +17,9 @@ Currently two top-level directories:
 
 There is **no Python, no Node, no uv/Ruff** in this repo — the global
 template's `[Tool Execution]` section about uv/Ruff does not apply here.
-This is a pure Bash 5.3+ repo. Pre-commit hooks are not currently
-configured (no `.pre-commit-config.yaml`).
+This is a pure Bash 5.3+ repo. Pre-commit hooks are configured per the
+global enforcement baseline (`.pre-commit-config.yaml`); shellcheck runs
+at `--severity=error` until the SC2155 cleanup follow-up lands.
 
 ## Common commands
 
@@ -59,7 +60,7 @@ vm/DEPLOYMENT.md                               # risk register, test matrix, run
 
 ### vm/ dispatcher pattern
 
-```
+```text
 vm/scripts/vm                       ← entry point; argv[1] = subcommand
   ├── lib/common.sh                 ← strict-mode preamble + log/die/EXIT_* + require_cmd
   ├── lib/paths.sh                  ← XDG dirs + LIBVIRT_URI default

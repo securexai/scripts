@@ -1,0 +1,15 @@
+# mise.toml — repo-bootstrap baseline
+#
+# Pinned tool versions for reproducibility across toolbox rebuilds.
+# Activate with: mise install
+# Bump with:    mise upgrade <tool>
+#
+# https://mise.jdx.dev/configuration.html
+
+[tools]
+node = "latest"
+shellcheck = "0.10.0"
+shfmt = "3.7.0"
+
+[settings]
+experimental = true

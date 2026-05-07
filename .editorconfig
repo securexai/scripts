@@ -1,0 +1,22 @@
+# EditorConfig — repo-bootstrap baseline
+# https://editorconfig.org
+
+root = true
+
+[*]
+end_of_line = lf
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{py,toml}]
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+[*.md]
+# Markdown allows a trailing-2-space hard line break (MD009).
+trim_trailing_whitespace = false
