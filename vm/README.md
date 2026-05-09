@@ -4,7 +4,11 @@ Spin up real VMs on a Fedora 43 or 44 host (Kinoite or Workstation) to
 test, validate, and troubleshoot scripts in this repo. Native libvirt +
 cloud-init, no Vagrant / Packer / Ansible.
 
-> **Deployment status & test coverage:** see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+> [!NOTE]
+> Verification snapshot and risk register: [`DEPLOYMENT.md`](DEPLOYMENT.md).
+> Full CLI reference: [`../docs/vm-cli-reference.md`](../docs/vm-cli-reference.md).
+> Known footguns: [`../docs/vm-troubleshooting.md`](../docs/vm-troubleshooting.md).
+> Digest pinning runbook: [`../docs/vm-supply-chain.md`](../docs/vm-supply-chain.md).
 
 ## Targets
 
@@ -35,27 +39,17 @@ For `qemu:///system` (privileged) instead of the default `qemu:///session`
 USE_LIBVIRT_GROUP=1 ./vm/setup.sh
 ```
 
-## One-time per target: pin upstream digests
+## Supply-chain pins
 
-`vm/targets/*.env` ships with **empty `IMAGE_SHA256` / `OCI_DIGEST`** by
-design — the scripts fail loudly until you pin a value, so you never
-accidentally use an unverified image.
-
-**Fedora cloud** (do this once per Fedora point release):
-
-```bash
-curl -fsSL https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-43-x86_64-CHECKSUM \
-  | grep -E '^SHA256.*Fedora-Cloud-Base.*x86_64\.qcow2'
-# paste the digest into IMAGE_SHA256 in vm/targets/fedora-cloud.env
-```
-
-**Kinoite** (do this once per OCI image bump):
-
-```bash
-podman pull quay.io/fedora-ostree-desktops/kinoite:43
-podman inspect --format '{{.Digest}}' quay.io/fedora-ostree-desktops/kinoite:43
-# paste the sha256:... into OCI_DIGEST in vm/targets/kinoite.env
-```
+`vm/targets/*.env` ships with **populated** `IMAGE_SHA256` (Fedora Cloud)
+and `OCI_DIGEST` (Kinoite) values, and `vm create` refuses to boot an
+image whose hash doesn't match. You only re-pin when bumping to a new
+upstream point release or rebuilding the derived Kinoite OCI — the
+runbook for both lives in
+[`../docs/vm-supply-chain.md`](../docs/vm-supply-chain.md). The Kinoite
+targets track locally-derived OCIs (`localhost/scripts-vm-bootc:latest`,
+`localhost/scripts-vm-kinoite-44:latest`); pin the **local image ID**
+after rebuilding the Containerfile, not the upstream Quay digest.
 
 ## Quickstart — `fedora-cloud`
 
@@ -71,8 +65,21 @@ podman inspect --format '{{.Digest}}' quay.io/fedora-ostree-desktops/kinoite:43
 
 ## Quickstart — `kinoite` (slow path, opt-in)
 
+`vm/targets/kinoite.env` points at a locally-derived OCI
+(`localhost/scripts-vm-bootc:latest`), so a fresh clone needs the
+Containerfile build before bib has anything to consume. Rootless bib
+hits R-018 on the parent-namespace remount; `BIB_ROOTFUL=1` opts into
+`sudo podman`.
+
 ```bash
-./vm/scripts/vm build-kinoite                        # 10–20 min, cached
+# One-time per Containerfile.bootc change: build the derived OCI.
+sudo podman build -t localhost/scripts-vm-bootc:latest \
+  -f vm/Containerfile.bootc vm/
+sudo podman inspect --format '{{.Id}}' localhost/scripts-vm-bootc:latest
+# → paste the sha256:... into vm/targets/kinoite.env :: OCI_DIGEST
+
+# Then bib the qcow (slow — 10–20 min, cached) and create:
+BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite
 ./vm/scripts/vm create --target kinoite --name k1
 ./vm/scripts/vm ssh    k1 -- 'rpm-ostree status'
 ./vm/scripts/vm destroy k1
@@ -101,7 +108,7 @@ BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite --target kinoite-44
 ## CLI surface
 
 ```text
-vm create   --target {fedora-cloud|kinoite} --name <n>
+vm create   --target {fedora-cloud|fedora-cloud-44|kinoite|kinoite-44} --name <n>
             [--cpus N] [--mem MIB] [--disk GIB]
             [--overlay <name>] [--with-cockpit]
 vm start    <name>
@@ -113,8 +120,11 @@ vm reset    <name> <snap>      revert to snapshot
 vm list                        tidy table from virsh list --all
 vm status   <name>             state, IP, snapshots, disk path
 vm prune    [--apply]          remove orphan disks/seeds/locks (dry-run default)
-vm build-kinoite               run the bib pipeline (slow, opt-in)
+vm build-kinoite [--target N]  run the bib pipeline (slow, opt-in)
 ```
+
+For the full reference (every flag, every exit code, every env var) see
+[`../docs/vm-cli-reference.md`](../docs/vm-cli-reference.md).
 
 `--with-cockpit` adds the cockpit web UI on port 9090. For `fedora-cloud` it
 applies a cloud-init overlay (packages + `cockpit.socket` + firewalld);
@@ -163,9 +173,10 @@ Honored everywhere:
 
 `vm/tests/smoke.sh` is a thin wrapper around [ShellSpec](https://shellspec.info/)
 running the suites under `vm/spec/`. The default lane (~5 min on a warm
-cache) covers specs 00–40 on `fedora-cloud`: preflight, create, cloud-init
-readiness, internet, ssh + sudo, snapshot. Specs 60/65/70/80
-(destroy-residue, prune, idempotency, parallel-safety) are exercised
+cache) covers specs 00–40 on `fedora-cloud`: preflight, dispatcher
+arg-validation, create, cloud-init readiness, internet, ssh + sudo,
+snapshot. Specs 60/65/66/70/80 (destroy-residue, prune,
+prune-pool-residue, idempotency, parallel-safety) are exercised
 **standalone** because the suite hits a cosmetic ShellSpec abort after
 spec 40 (R-016 in `DEPLOYMENT.md`); the wrapper handles the abort by
 exiting 0 when failures + errors are both zero. Cockpit (50) and kinoite
@@ -200,10 +211,25 @@ toolbox just ships clients that talk to it over the bind-mounted
 ## Out of scope (deliberately)
 
 - No Vagrant / Packer / Ansible / Molecule / Terraform / Bats.
-- No multi-distro matrix (Debian, Ubuntu, RHEL clones) — Fedora 43 only.
+- No multi-distro matrix (Debian, Ubuntu, RHEL clones) — Fedora 43 / 44 only.
 - No aarch64 — x86_64 only.
 - No SPICE / virt-viewer wiring — `--graphics none` everywhere.
 - No custom libvirt networks — default NAT bridge only.
 - No nested virt, PCI passthrough, SR-IOV.
 - No CI integration — local-only tool; nested KVM in GitHub runners is
   unreliable.
+
+## See also
+
+- [`../README.md`](../README.md) — repo overview
+- [`../docs/vm-cli-reference.md`](../docs/vm-cli-reference.md) — full
+  CLI surface
+- [`../docs/vm-architecture.md`](../docs/vm-architecture.md) — design
+  rationale and invariants
+- [`../docs/vm-supply-chain.md`](../docs/vm-supply-chain.md) — digest
+  pinning procedure
+- [`../docs/vm-troubleshooting.md`](../docs/vm-troubleshooting.md) —
+  symptom-indexed fixes
+- [`DEPLOYMENT.md`](DEPLOYMENT.md) — verification snapshot and risk
+  register
+- [`../CHANGELOG.md`](../CHANGELOG.md) — chronological history
