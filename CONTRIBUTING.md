@@ -7,9 +7,10 @@ honest.
 ## Dev environment
 
 The dev environment is a Fedora-toolbox container baked from
-[`.toolbox/Containerfile`](.toolbox/Containerfile). It pins every tool the
-pre-commit hooks need (`uv`, `ruff`, `betterleaks`, `pnpm`, `commitlint`,
-`shellcheck` via `mise`, `markdownlint-cli2`).
+[`.toolbox/Containerfile`](.toolbox/Containerfile). It pins the tools that
+need to be on `$PATH` (`uv`, `ruff`, `betterleaks`, `pnpm`, `commitlint`);
+`shellcheck` and `markdownlint-cli2` come from pre-commit's per-hook
+environments rather than the toolbox image.
 
 ```bash
 ./.toolbox/setup.sh           # build image + create container, ~3 min

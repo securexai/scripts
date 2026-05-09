@@ -46,9 +46,10 @@ usage: vm create --target <name> --name <vm-name> [options]
 on a fedora-cloud target applies the `cockpit` overlay; on a kinoite
 target it switches the bib config to `kinoite-cockpit.toml`.
 
-Exit codes: `64` (usage), `69` (preflight / missing binary), `70`
-(libvirt — including "domain already exists"), `71` (outbound network
-probe failed), `72` (cloud-init reported a fatal error).
+Exit codes: `64` (usage — including "VM already exists"), `69`
+(preflight / missing binary), `70` (libvirt — lock contention or no
+IPv4 lease before timeout), `71` (outbound network probe failed), `72`
+(cloud-init reported a fatal error).
 
 ### `start`
 
@@ -216,9 +217,9 @@ failure" or "guest cloud-init failure").
 | --- | --- | --- | --- |
 | `0` | `EXIT_OK` | Success | — |
 | `1` | `EXIT_GENERIC` | Catch-all error | Read the log line above the exit |
-| `64` | `EXIT_USAGE` | Bad CLI args, missing required flag | Re-read `vm <subcmd> --help` |
+| `64` | `EXIT_USAGE` | Bad CLI args, missing required flag, or pre-flight refusal (e.g. `vm create` on an existing name) | Re-read `vm <subcmd> --help`; `vm destroy <name>` first if the name is taken |
 | `69` | `EXIT_PREREQ` | Missing host capability or binary | Run `./vm/setup.sh`; re-check Fedora 43/44 + KVM |
-| `70` | `EXIT_LIBVIRT` | libvirt error (domain conflict, undefine failure) | `virsh list --all`; `vm destroy <name>` to clear |
+| `70` | `EXIT_LIBVIRT` | libvirt operation failed (lock contention, no IPv4 lease before timeout) | `virsh list --all`; remove a stale `seeds/<name>.lock`; check the libvirt default NAT |
 | `71` | `EXIT_NET` | Outbound network probe failed | Check libvirt default NAT, host firewall, DNS |
 | `72` | `EXIT_CLOUDINIT` | cloud-init reported a fatal error on the guest | `vm ssh <name> -- sudo cloud-init status --long` |
 

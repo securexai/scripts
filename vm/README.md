@@ -39,27 +39,17 @@ For `qemu:///system` (privileged) instead of the default `qemu:///session`
 USE_LIBVIRT_GROUP=1 ./vm/setup.sh
 ```
 
-## One-time per target: pin upstream digests
+## Supply-chain pins
 
-`vm/targets/*.env` ships with **empty `IMAGE_SHA256` / `OCI_DIGEST`** by
-design — the scripts fail loudly until you pin a value, so you never
-accidentally use an unverified image.
-
-**Fedora cloud** (do this once per Fedora point release):
-
-```bash
-curl -fsSL https://download.fedoraproject.org/pub/fedora/linux/releases/43/Cloud/x86_64/images/Fedora-Cloud-43-x86_64-CHECKSUM \
-  | grep -E '^SHA256.*Fedora-Cloud-Base.*x86_64\.qcow2'
-# paste the digest into IMAGE_SHA256 in vm/targets/fedora-cloud.env
-```
-
-**Kinoite** (do this once per OCI image bump):
-
-```bash
-podman pull quay.io/fedora-ostree-desktops/kinoite:43
-podman inspect --format '{{.Digest}}' quay.io/fedora-ostree-desktops/kinoite:43
-# paste the sha256:... into OCI_DIGEST in vm/targets/kinoite.env
-```
+`vm/targets/*.env` ships with **populated** `IMAGE_SHA256` (Fedora Cloud)
+and `OCI_DIGEST` (Kinoite) values, and `vm create` refuses to boot an
+image whose hash doesn't match. You only re-pin when bumping to a new
+upstream point release or rebuilding the derived Kinoite OCI — the
+runbook for both lives in
+[`../docs/vm-supply-chain.md`](../docs/vm-supply-chain.md). The Kinoite
+targets track locally-derived OCIs (`localhost/scripts-vm-bootc:latest`,
+`localhost/scripts-vm-kinoite-44:latest`); pin the **local image ID**
+after rebuilding the Containerfile, not the upstream Quay digest.
 
 ## Quickstart — `fedora-cloud`
 
@@ -208,7 +198,7 @@ toolbox just ships clients that talk to it over the bind-mounted
 ## Out of scope (deliberately)
 
 - No Vagrant / Packer / Ansible / Molecule / Terraform / Bats.
-- No multi-distro matrix (Debian, Ubuntu, RHEL clones) — Fedora 43 only.
+- No multi-distro matrix (Debian, Ubuntu, RHEL clones) — Fedora 43 / 44 only.
 - No aarch64 — x86_64 only.
 - No SPICE / virt-viewer wiring — `--graphics none` everywhere.
 - No custom libvirt networks — default NAT bridge only.

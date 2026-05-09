@@ -12,7 +12,7 @@ not by drifting individual tool versions in `~/.local`.
 toolbox enter scripts          # land inside
 
 # Verify the toolchain is reachable
-which uv ruff betterleaks pnpm commitlint shellcheck markdownlint-cli2
+which uv ruff betterleaks pnpm commitlint
 ```
 
 The script is idempotent: if the image and container already exist, it
@@ -55,7 +55,7 @@ Pinned tools (sha256-verified where the upstream publishes a checksum):
 | `@commitlint/config-conventional` | latest at build | `pnpm add -g` | (config dependency) |
 
 `uv tool install` and `pnpm add -g` use install-time-resolved versions; they
-floats forward on each rebuild. The `uv`, `betterleaks`, and `pnpm`
+float forward on each rebuild. The `uv`, `betterleaks`, and `pnpm`
 versions are exact-pinned via `ARG` in the Containerfile.
 
 The pnpm global store lives under `/opt/pnpm-global`; binaries land at
