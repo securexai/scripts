@@ -4,7 +4,11 @@ Spin up real VMs on a Fedora 43 or 44 host (Kinoite or Workstation) to
 test, validate, and troubleshoot scripts in this repo. Native libvirt +
 cloud-init, no Vagrant / Packer / Ansible.
 
-> **Deployment status & test coverage:** see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+> [!NOTE]
+> Verification snapshot and risk register: [`DEPLOYMENT.md`](DEPLOYMENT.md).
+> Full CLI reference: [`../docs/vm-cli-reference.md`](../docs/vm-cli-reference.md).
+> Known footguns: [`../docs/vm-troubleshooting.md`](../docs/vm-troubleshooting.md).
+> Digest pinning runbook: [`../docs/vm-supply-chain.md`](../docs/vm-supply-chain.md).
 
 ## Targets
 
@@ -101,7 +105,7 @@ BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite --target kinoite-44
 ## CLI surface
 
 ```text
-vm create   --target {fedora-cloud|kinoite} --name <n>
+vm create   --target {fedora-cloud|fedora-cloud-44|kinoite|kinoite-44} --name <n>
             [--cpus N] [--mem MIB] [--disk GIB]
             [--overlay <name>] [--with-cockpit]
 vm start    <name>
@@ -113,8 +117,11 @@ vm reset    <name> <snap>      revert to snapshot
 vm list                        tidy table from virsh list --all
 vm status   <name>             state, IP, snapshots, disk path
 vm prune    [--apply]          remove orphan disks/seeds/locks (dry-run default)
-vm build-kinoite               run the bib pipeline (slow, opt-in)
+vm build-kinoite [--target N]  run the bib pipeline (slow, opt-in)
 ```
+
+For the full reference (every flag, every exit code, every env var) see
+[`../docs/vm-cli-reference.md`](../docs/vm-cli-reference.md).
 
 `--with-cockpit` adds the cockpit web UI on port 9090. For `fedora-cloud` it
 applies a cloud-init overlay (packages + `cockpit.socket` + firewalld);
@@ -163,9 +170,10 @@ Honored everywhere:
 
 `vm/tests/smoke.sh` is a thin wrapper around [ShellSpec](https://shellspec.info/)
 running the suites under `vm/spec/`. The default lane (~5 min on a warm
-cache) covers specs 00–40 on `fedora-cloud`: preflight, create, cloud-init
-readiness, internet, ssh + sudo, snapshot. Specs 60/65/70/80
-(destroy-residue, prune, idempotency, parallel-safety) are exercised
+cache) covers specs 00–40 on `fedora-cloud`: preflight, dispatcher
+arg-validation, create, cloud-init readiness, internet, ssh + sudo,
+snapshot. Specs 60/65/66/70/80 (destroy-residue, prune,
+prune-pool-residue, idempotency, parallel-safety) are exercised
 **standalone** because the suite hits a cosmetic ShellSpec abort after
 spec 40 (R-016 in `DEPLOYMENT.md`); the wrapper handles the abort by
 exiting 0 when failures + errors are both zero. Cockpit (50) and kinoite
@@ -207,3 +215,18 @@ toolbox just ships clients that talk to it over the bind-mounted
 - No nested virt, PCI passthrough, SR-IOV.
 - No CI integration — local-only tool; nested KVM in GitHub runners is
   unreliable.
+
+## See also
+
+- [`../README.md`](../README.md) — repo overview
+- [`../docs/vm-cli-reference.md`](../docs/vm-cli-reference.md) — full
+  CLI surface
+- [`../docs/vm-architecture.md`](../docs/vm-architecture.md) — design
+  rationale and invariants
+- [`../docs/vm-supply-chain.md`](../docs/vm-supply-chain.md) — digest
+  pinning procedure
+- [`../docs/vm-troubleshooting.md`](../docs/vm-troubleshooting.md) —
+  symptom-indexed fixes
+- [`DEPLOYMENT.md`](DEPLOYMENT.md) — verification snapshot and risk
+  register
+- [`../CHANGELOG.md`](../CHANGELOG.md) — chronological history
