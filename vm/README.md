@@ -65,8 +65,21 @@ after rebuilding the Containerfile, not the upstream Quay digest.
 
 ## Quickstart — `kinoite` (slow path, opt-in)
 
+`vm/targets/kinoite.env` points at a locally-derived OCI
+(`localhost/scripts-vm-bootc:latest`), so a fresh clone needs the
+Containerfile build before bib has anything to consume. Rootless bib
+hits R-018 on the parent-namespace remount; `BIB_ROOTFUL=1` opts into
+`sudo podman`.
+
 ```bash
-./vm/scripts/vm build-kinoite                        # 10–20 min, cached
+# One-time per Containerfile.bootc change: build the derived OCI.
+sudo podman build -t localhost/scripts-vm-bootc:latest \
+  -f vm/Containerfile.bootc vm/
+sudo podman inspect --format '{{.Id}}' localhost/scripts-vm-bootc:latest
+# → paste the sha256:... into vm/targets/kinoite.env :: OCI_DIGEST
+
+# Then bib the qcow (slow — 10–20 min, cached) and create:
+BIB_ROOTFUL=1 ./vm/scripts/vm build-kinoite
 ./vm/scripts/vm create --target kinoite --name k1
 ./vm/scripts/vm ssh    k1 -- 'rpm-ostree status'
 ./vm/scripts/vm destroy k1
