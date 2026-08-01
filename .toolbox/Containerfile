@@ -51,8 +51,8 @@ RUN UV_TOOL_DIR=/opt/uv-tools \
 # Pin both version and sha256; the build fails fast if upstream rotates the
 # asset or the download corrupts. amd64-only — add an arm64 branch here if
 # the toolbox ever needs to run on Apple Silicon / arm Linux.
-ARG BETTERLEAKS_VERSION=1.1.2
-ARG BETTERLEAKS_SHA256=648c20617178065072ff1791d383192a62c911d9b4427f0426a8c504a6d9ddad
+ARG BETTERLEAKS_VERSION=1.7.3
+ARG BETTERLEAKS_SHA256=9d2ed6fc387bc1c3f95557d5539077b1ce422f0db5ec38db5f14a141ad2947bf
 RUN set -eu; \
     url="https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"; \
     tmp="$(mktemp -d)"; \
