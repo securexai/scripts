@@ -78,8 +78,8 @@ RUN set -eu; \
 # Global pnpm installs go straight to /usr/local/bin via --global-bin-dir
 # (already on PATH, satisfies pnpm's safety check); --global-dir holds the
 # package store under /opt so user $HOME stays untouched.
-ARG PNPM_VERSION=11.0.3
-ARG PNPM_SHA256=5c236f22568453e76f05c2c0a37b483d326ddb3c7759f3b7a7f13a8860109771
+ARG PNPM_VERSION=11.18.0
+ARG PNPM_SHA256=f4e62794c56f7a1ad01097f94b90ca95680080aa2e83ebc3d0a751fb8aa8e4ad
 RUN set -eu; \
     url="https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-x64.tar.gz"; \
     tmp="$(mktemp -d)"; \
